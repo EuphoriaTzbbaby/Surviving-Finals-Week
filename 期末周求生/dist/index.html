@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>期末周求生 · 三天，九次抉择，一张战绩单</title>
+<meta name="description" content="一个 3 分钟的浏览器互动叙事游戏：输入你的专业和最怕的科目，在期末周的九个时段做选择，最后得到一张可分享的期末人设战绩卡。">
+<meta name="theme-color" content="#0A0D1C">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230A0D1C'/%3E%3Cpath d='M14 46V20l18-6 18 6v26' fill='none' stroke='%23FFB020' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M32 14v32' stroke='%23B6F03C' stroke-width='3'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="bg-mesh"></div>
+  <div class="bg-aurora a1"></div>
+  <div class="bg-aurora a2"></div>
+  <div class="bg-aurora a3"></div>
+  <div class="bg-lamp"></div>
+  <div class="bg-rules"></div>
+  <div class="bg-grain"></div>
+  <div class="bg-dust"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+</div>
+<div id="flash" aria-hidden="true"></div>
+<div id="fx-layer" aria-hidden="true"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<header class="topbar">
+  <a class="brand" href="#" onclick="return false">
+    <span class="brand-mark">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 50V18l20-7 20 7v32" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linejoin="round"/><path d="M32 11v39" stroke="currentColor" stroke-width="3.4" opacity=".55"/><circle cx="32" cy="43" r="4" fill="currentColor"/></svg>
+    </span>
+    <span class="brand-txt">
+      <b>期末周求生</b>
+      <i>Finals Week Survival</i>
+    </span>
+  </a>
+  <div class="top-right">
+    <span class="pill" id="run-progress">未开局</span>
+    <span class="pill diff" id="diff-pill">标准</span>
+    <button class="icon-btn" id="btn-sound" aria-pressed="true" title="音效开关（M）">
+      <svg class="snd-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+      <svg class="snd-off" viewBox="0 0 24 24" aria-hidden="true" style="display:none"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span class="snd-label">音效开</span>
+    </button>
+    <button class="icon-btn" id="btn-restart" title="回到开局">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>重开</span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ 开局 ============ -->
+<section class="screen active" id="screen-title">
+  <div class="hero">
+    <div class="hero-badge">2026 Qoder 高校创造力大赛 · LifeHack</div>
+    <h1 class="hero-title">
+      <span class="l1">期末周</span><span class="l2">求生</span>
+    </h1>
+    <p class="hero-sub">三天。<b>九次抉择</b>。四个互相牵制的数值。<br>最后你会拿到一张属于自己的期末人设战绩单。</p>
+    <div class="hero-facts">
+      <div class="fact"><b>3</b><span>分钟一局</span></div>
+      <div class="fact"><b>36</b><span>个真实事件</span></div>
+      <div class="fact"><b>11</b><span>种结局</span></div>
+      <div class="fact"><b>0</b><span>注册 / 下载</span></div>
+    </div>
+  </div>
+
+  <div class="setup panel">
+    <div class="panel-head">
+      <h2>开局设置</h2>
+      <span class="hint">全部可以默认，直接点开始</span>
+    </div>
+
+    <div class="field">
+      <label for="major-select">你的专业</label>
+      <div class="select-wrap">
+        <select id="major-select"></select>
+        <span class="sel-arrow">▾</span>
+      </div>
+    </div>
+    <div class="field" id="custom-major">
+      <label for="custom-major-input">自定义专业名称</label>
+      <input id="custom-major-input" type="text" maxlength="16" placeholder="例如：考古学">
+    </div>
+    <div class="field">
+      <label for="subject-input">最怕的那门课</label>
+      <input id="subject-input" type="text" list="subject-list" maxlength="16" placeholder="例如：数据结构" autocomplete="off">
+      <datalist id="subject-list"></datalist>
+    </div>
+
+    <div class="field">
+      <label>难度</label>
+      <div class="diff-row">
+        <button class="diff-btn" data-d="easy"><b>佛系</b><i>遗忘慢</i></button>
+        <button class="diff-btn" data-d="normal"><b>标准</b><i>正常期末</i></button>
+        <button class="diff-btn" data-d="hard"><b>卷王</b><i>闭卷无重点</i></button>
+      </div>
+      <p class="diff-desc" id="diff-desc"></p>
+    </div>
+
+    <div class="start-row">
+      <button class="btn-primary" id="btn-start">
+        <span>开始这三天</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m-5-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn-ghost" id="btn-resume">
+        <span>继续上一局</span>
+        <i id="resume-info"></i>
+      </button>
+    </div>
+
+    <div class="hist-strip">
+      <div><b id="hist-runs">0</b><span>总场次</span></div>
+      <div><b id="hist-best">0</b><span>最高分</span></div>
+      <div><b id="hist-pass">—</b><span>及格率</span></div>
+    </div>
+  </div>
+
+  <div class="panel collection">
+    <div class="panel-head">
+      <h2>结局图鉴</h2>
+      <span class="hint"><b class="collection-count">0 / 11</b> 已解锁</span>
+    </div>
+    <div class="col-grid js-collection"></div>
+    <p class="col-tip">同一个人设很难拿两次——数值组合决定称号。集齐需要换着法子活。</p>
+  </div>
+
+  <div class="panel howto">
+    <div class="panel-head"><h2>怎么玩</h2><span class="hint">评委五步以内</span></div>
+    <ol class="steps">
+      <li><b>1</b><span>选专业、填最怕的科目（已预填，可直接跳过）</span></li>
+      <li><b>2</b><span>点「开始这三天」</span></li>
+      <li><b>3</b><span>每个时段读事件，从 2–3 个选项里挑一个</span></li>
+      <li><b>4</b><span>盯住右侧四条数值，别让体力和心态见底</span></li>
+      <li><b>5</b><span>考完生成战绩卡，保存或分享</span></li>
+    </ol>
+    <div class="rules-note">
+      <p><b>知识</b>决定分数上限，但每天睡觉会遗忘一部分。</p>
+      <p><b>体力</b>低于 25，学进去的东西直接减半；见底会被强制睡过去。</p>
+      <p><b>心态</b>低于 25 会走神；见底会强制崩一次。</p>
+      <p><b>人脉</b>解锁借笔记、问学长这些高收益选项，考场上还能兑现成情报分。</p>
+      <p>连续选学习类选项会累积<b>专注</b>，知识额外加成，但体力恢复打折。</p>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>全程用 Qoder 开发与部署 · 纯前端 · 无外部依赖</span>
+    <button class="link-btn" id="btn-copy-link">复制本站链接</button>
+  </footer>
+</section>
+
+<!-- ============ 对局 ============ -->
+<section class="screen" id="screen-game">
+  <div class="game-grid">
+    <div class="stage panel">
+      <div class="stage-head">
+        <div class="time-block">
+          <span class="day" id="day-label">第 1 天</span>
+          <span class="slot" id="slot-label">清晨</span>
+          <span class="clock" id="clock">08:20</span>
+        </div>
+        <div class="scene" id="scene-art" data-scene="library"></div>
+      </div>
+
+      <p class="kicker" id="event-kicker">清晨 · 事件 1 / 9</p>
+      <h2 class="ev-title" id="event-title">七点二十的图书馆</h2>
+      <p class="ev-text" id="event-text"></p>
+
+      <div class="choices" id="choices"></div>
+
+      <div class="result-box" id="result-box">
+        <span class="r-tag t-卷">卷</span>
+        <p class="r-text" id="result-text"></p>
+      </div>
+      <button class="btn-next" id="btn-next">
+        <span>继续</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m-5-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <p class="kbd-tip">键盘 <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 选择 · <kbd>空格</kbd> 继续 · <kbd>M</kbd> 静音</p>
+    </div>
+
+    <aside class="side">
+      <div class="panel stats-panel">
+        <div class="panel-head"><h2>状态</h2><span class="hint">实时</span></div>
+        <div class="gauges">
+          <div class="gauge" data-k="k" style="--gc:#B6F03C">
+            <div class="g-top"><span class="g-name">知识</span><span class="g-val">18</span></div>
+            <div class="g-track"><div class="g-fill" style="width:18%"></div></div>
+          </div>
+          <div class="gauge" data-k="s" style="--gc:#FFB020">
+            <div class="g-top"><span class="g-name">体力</span><span class="g-val">85</span></div>
+            <div class="g-track"><div class="g-fill" style="width:85%"></div></div>
+          </div>
+          <div class="gauge" data-k="m" style="--gc:#FF3D8B">
+            <div class="g-top"><span class="g-name">心态</span><span class="g-val">70</span></div>
+            <div class="g-track"><div class="g-fill" style="width:70%"></div></div>
+          </div>
+          <div class="gauge" data-k="n" style="--gc:#35D6F5">
+            <div class="g-top"><span class="g-name">人脉</span><span class="g-val">30</span></div>
+            <div class="g-track"><div class="g-fill" style="width:30%"></div></div>
+          </div>
+        </div>
+        <div class="focus" id="focus-meter">
+          <span class="f-label" id="focus-num">专注中断</span>
+          <span class="f-pips" id="focus-pips"><i></i><i></i><i></i><i></i><i></i></span>
+        </div>
+        <div class="status-note" id="status-note"></div>
+      </div>
+
+      <div class="panel tl-panel">
+        <div class="panel-head"><h2>三天进度</h2><span class="hint">9 个时段</span></div>
+        <div class="timeline" id="timeline"></div>
+        <div class="tl-legend">
+          <span><i class="t-卷"></i>卷</span><span><i class="t-稳"></i>稳</span>
+          <span><i class="t-躺"></i>躺</span><span><i class="t-友"></i>友</span><span><i class="t-险"></i>险</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 考试 ============ -->
+<section class="screen" id="screen-exam">
+  <div class="exam-banner" id="exam-banner">
+    <span class="eb-line"></span>
+    <b>考试日</b>
+    <i id="exam-banner-sub">闭卷 · 120 分钟</i>
+    <span class="eb-line"></span>
+  </div>
+  <div class="panel exam-panel">
+    <div class="exam-head">
+      <span class="exam-step" id="exam-step">第 1 / 3 题</span>
+      <span class="exam-clock" id="exam-clock">剩余 22:00</span>
+    </div>
+    <h2 class="ev-title" id="exam-title">选择题 · 最后五道</h2>
+    <p class="ev-text" id="exam-text"></p>
+    <div class="choices" id="exam-choices"></div>
+    <div class="result-box" id="exam-result">
+      <span class="r-tag t-考">答</span>
+      <p class="r-text" id="exam-result-text"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 结算 ============ -->
+<section class="screen" id="screen-result">
+  <div class="result-grid">
+    <div class="card-col">
+      <div class="card-wrap" id="card-wrap">
+        <canvas id="card-canvas" width="1080" height="1440" aria-label="期末周求生战绩卡"></canvas>
+        <div class="card-glow"></div>
+      </div>
+      <div class="card-actions">
+        <button class="btn-primary" id="btn-save-card">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-4l5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>保存战绩卡</span>
+        </button>
+        <button class="btn-ghost" id="btn-share">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-8l4-4 4 4M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>分享</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="result-col">
+      <div class="unlock-toast" id="unlock-toast">
+        <span class="ut-star">✦</span>
+        <span>解锁新结局 <b id="unlock-name"></b></span>
+      </div>
+      <div class="panel result-panel">
+        <p class="r-headline" id="result-headline">你活过了期末周</p>
+        <h2 class="r-ending" id="ending-name">玄学通关型</h2>
+        <div class="r-score-row">
+          <div class="r-score"><b id="result-score">0</b><span>/ 100</span></div>
+          <div class="r-grade" id="result-grade">D · 绩点 1.0</div>
+        </div>
+        <p class="r-line" id="result-line"></p>
+        <p class="r-meta" id="result-meta"></p>
+        <div class="r-actions">
+          <button class="btn-primary" id="btn-quick-again"><span>同一设定再来一局</span></button>
+          <button class="btn-ghost" id="btn-again"><span>换专业 / 换难度</span></button>
+        </div>
+      </div>
+      <div class="panel collection">
+        <div class="panel-head"><h2>结局图鉴</h2><span class="hint"><b class="collection-count">0 / 11</b> 已解锁</span></div>
+        <div class="col-grid js-collection"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ 过夜 ============ -->
+<div class="overlay" id="overlay-dayend">
+  <div class="de-card panel">
+    <div class="de-moon">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M40 8a24 24 0 1 0 16 40A26 26 0 0 1 40 8z" fill="currentColor" opacity=".9"/><circle cx="50" cy="16" r="2" fill="currentColor"/><circle cx="56" cy="26" r="1.4" fill="currentColor"/></svg>
+    </div>
+    <h2 id="dayend-title">第 1 天结束</h2>
+    <p class="de-sub" id="dayend-sub"></p>
+    <div class="de-lines" id="dayend-lines"></div>
+    <div class="de-stats" id="dayend-stats"></div>
+    <button class="btn-primary" id="btn-dayend-next"><span>醒来，继续</span></button>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/card.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
