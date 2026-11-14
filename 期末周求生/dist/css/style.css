@@ -284,6 +284,17 @@ main { position: relative; z-index: 10; padding: 84px clamp(14px, 3.4vw, 34px) 5
 #custom-major { display: none; }
 #custom-major.on { display: block; animation: screenIn 0.3s ease; }
 
+.subject-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.subject-chips:empty { display: none; }
+.chip {
+  font-family: var(--sans); font-size: 12px; color: var(--muted-2);
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(28, 36, 68, 0.5);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.chip:hover { border-color: var(--line-2); color: var(--paper); }
+.chip.on { border-color: var(--amber); color: var(--amber-soft); background: rgba(255, 176, 32, 0.12); }
+
 .diff-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .diff-btn {
   padding: 11px 8px; border-radius: var(--r-s);

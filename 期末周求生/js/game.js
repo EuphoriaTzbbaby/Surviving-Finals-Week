@@ -273,10 +273,11 @@ window.FZ = window.FZ || {};
     if (S.day > 3) { startExam(); return; }
     let ev = null;
     const B = FZ.BALANCE;
-    if (S.stats.s <= B.collapseAt) { ev = FZ.EVENTS.find((e) => e.id === 'f_collapse'); S.stats.s = 14; }
-    else if (S.stats.m <= B.burnoutAt) { ev = FZ.EVENTS.find((e) => e.id === 'f_burnout'); S.stats.m = 14; }
+    if (S.stats.s <= B.collapseAt) { ev = FZ.EVENTS.find((e) => e.id === 'f_collapse'); S.stats.s = 14; setTimeout(() => FZ.Voice.say('collapse'), 500); }
+    else if (S.stats.m <= B.burnoutAt) { ev = FZ.EVENTS.find((e) => e.id === 'f_burnout'); S.stats.m = 14; setTimeout(() => FZ.Voice.say('burnout'), 500); }
     else if (S.stats.n >= B.socialTipAt && !S.tipUsed && S.day >= 2) {
       ev = FZ.EVENTS.find((e) => e.id === 'f_tip'); S.tipUsed = true;
+      setTimeout(() => FZ.Voice.say('tip'), 500);
     }
     if (!ev) {
       const slotKey = FZ.SLOTS[S.slot].key;
@@ -354,8 +355,9 @@ window.FZ = window.FZ || {};
     else if (net > 0) FZ.Audio.play('gain');
     else FZ.Audio.play('mixed');
     if (ch.study && S.focus >= 3) setTimeout(() => FZ.Audio.play('combo'), 180);
-    if (pre.s >= FZ.BALANCE.lowStamina && S.stats.s < FZ.BALANCE.lowStamina) setTimeout(() => { FZ.Audio.play('warn'); toast('体力跌破 25，知识获取减半', '#FFB020'); }, 320);
-    if (pre.m >= FZ.BALANCE.lowMind && S.stats.m < FZ.BALANCE.lowMind) setTimeout(() => { FZ.Audio.play('warn'); toast('心态跌破 25，开始容易走神', '#FF3D8B'); }, 320);
+    if (ch.study && S.focus === 3) setTimeout(() => FZ.Voice.say('focus'), 420);
+    if (pre.s >= FZ.BALANCE.lowStamina && S.stats.s < FZ.BALANCE.lowStamina) setTimeout(() => { FZ.Audio.play('warn'); FZ.Voice.say('warnS'); toast('体力跌破 25，知识获取减半', '#FFB020'); }, 320);
+    if (pre.m >= FZ.BALANCE.lowMind && S.stats.m < FZ.BALANCE.lowMind) setTimeout(() => { FZ.Audio.play('warn'); FZ.Voice.say('warnM'); toast('心态跌破 25，开始容易走神', '#FF3D8B'); }, 320);
     if (S.distracted) { setTimeout(() => toast('走神了，这次记住的比预期少', '#FF3D8B'), 500); S.distracted = false; }
 
     S.history.push({
@@ -424,6 +426,7 @@ window.FZ = window.FZ || {};
       <b>${Math.round(S.stats[st.key])}</b></div>`).join('');
     $('#overlay-dayend').classList.add('on');
     FZ.Audio.play('dayend');
+    setTimeout(() => FZ.Voice.say('night'), 700);
     S.phase = 'dayend';
     saveRun();
   }
@@ -438,6 +441,7 @@ window.FZ = window.FZ || {};
     $('#exam-banner-sub').textContent = `${S.subject} · 闭卷 · 120 分钟`;
     $('#exam-banner').classList.add('on');
     FZ.Audio.play('exam');
+    setTimeout(() => FZ.Voice.say('exam'), 600);
     setTimeout(() => { $('#exam-banner').classList.remove('on'); renderExam(); }, 1500);
   }
 
@@ -483,6 +487,7 @@ window.FZ = window.FZ || {};
     $$('#exam-choices .choice').forEach((b) => { b.disabled = true; b.classList.add('faded'); });
     if (e && e.currentTarget) e.currentTarget.classList.remove('faded');
     FZ.Audio.play(ch.fx.mod >= 6 ? 'gain' : 'mixed');
+    setTimeout(() => FZ.Voice.say(ch.fx.mod >= 6 ? 'examGood' : 'examBad'), 260);
     const rb = $('#exam-result');
     rb.classList.add('on');
     typeInto($('#exam-result-text'), fill(ch.result), 11, () => { busy = false; });
@@ -580,7 +585,7 @@ window.FZ = window.FZ || {};
     setTimeout(() => {
       FZ.Audio.play('stamp');
       $('#card-wrap').classList.add('stamped');
-      setTimeout(() => FZ.Audio.play(passed ? 'win' : 'fail'), 320);
+      setTimeout(() => { FZ.Audio.play(passed ? 'win' : 'fail'); FZ.Voice.say(passed ? 'win' : 'lose'); }, 320);
     }, 420);
 
     if (isNew) setTimeout(() => toast(`解锁新结局：${ending.title}`, ending.color), 1200);
@@ -617,6 +622,7 @@ window.FZ = window.FZ || {};
       resultShown: false, finished: false, phase: 'event'
     };
     $('#diff-pill').textContent = FZ.DIFFICULTY[diff].name;
+    FZ.Voice.say('start');
     nextEvent();
   }
 
@@ -649,6 +655,11 @@ window.FZ = window.FZ || {};
   }
 
   /* ---------- 初始化 ---------- */
+  function syncChips() {
+    const v = $('#subject-input').value;
+    $$('#subject-chips .chip').forEach((c) => c.classList.toggle('on', c.dataset.s === v));
+  }
+
   function buildTitle() {
     $('#fact-events').textContent = FZ.EVENTS.filter((e) => !e.forced).length;
     $('#fact-endings').textContent = FZ.ENDINGS.length;
@@ -659,15 +670,25 @@ window.FZ = window.FZ || {};
     const applyMajor = (name) => {
       const m = FZ.MAJORS.find((x) => x.name === name);
       dl.innerHTML = (m ? m.subjects : []).map((s) => `<option value="${s}">`).join('');
+      $('#subject-chips').innerHTML = (m ? m.subjects : []).map((s) => `<button type="button" class="chip" data-s="${s}">${s}</button>`).join('');
       if (m && (!$('#subject-input').value || $('#subject-input').dataset.auto === '1')) {
         $('#subject-input').value = m.subjects[0];
         $('#subject-input').dataset.auto = '1';
       }
       $('#custom-major').classList.toggle('on', name === '__custom');
       if (name === '__custom') $('#custom-major-input').focus();
+      syncChips();
     };
     sel.addEventListener('change', () => { FZ.Audio.play('tap'); applyMajor(sel.value); });
-    $('#subject-input').addEventListener('input', (e) => { e.target.dataset.auto = '0'; });
+    $('#subject-input').addEventListener('input', (e) => { e.target.dataset.auto = '0'; syncChips(); });
+    $('#subject-chips').addEventListener('click', (e) => {
+      const b = e.target.closest('.chip');
+      if (!b) return;
+      FZ.Audio.play('tap');
+      $('#subject-input').value = b.dataset.s;
+      $('#subject-input').dataset.auto = '1';
+      syncChips();
+    });
     $('#custom-major-input').addEventListener('input', () => {});
 
     const savedMajor = meta.major && FZ.MAJORS.some((m) => m.name === meta.major) ? meta.major : FZ.MAJORS[0].name;
@@ -676,6 +697,7 @@ window.FZ = window.FZ || {};
     // 从存档回填的科目仍算"自动填充"：只有用户本局亲手输入过才锁定，
     // 否则换专业时会留着上一个专业的科目（临床医学配数据结构）。
     if (meta.subject) { $('#subject-input').value = meta.subject; $('#subject-input').dataset.auto = '1'; }
+    syncChips();
 
     $$('.diff-btn').forEach((b) => {
       b.classList.toggle('on', b.dataset.d === (meta.diff || 'normal'));
@@ -822,6 +844,7 @@ window.FZ = window.FZ || {};
 
   function syncSound() {
     const on = FZ.Audio.isEnabled();
+    FZ.Voice.setEnabled(on);
     const b = $('#btn-sound');
     b.classList.toggle('off', !on);
     b.setAttribute('aria-pressed', String(on));
