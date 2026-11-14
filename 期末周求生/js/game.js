@@ -280,12 +280,19 @@ window.FZ = window.FZ || {};
     }
     if (!ev) {
       const slotKey = FZ.SLOTS[S.slot].key;
-      let pool = FZ.EVENTS.filter((e) => e.slot === slotKey && !e.forced && !S.used.includes(e.id));
+      const ok = (e) => e.slot === slotKey && !e.forced && (!e.major || e.major === S.major);
+      let pool = FZ.EVENTS.filter((e) => ok(e) && !S.used.includes(e.id));
       if (!pool.length) {
         S.used = S.used.filter((id) => !FZ.EVENTS.find((e) => e.id === id && e.slot === slotKey));
-        pool = FZ.EVENTS.filter((e) => e.slot === slotKey && !e.forced);
+        pool = FZ.EVENTS.filter(ok);
       }
-      ev = pick(pool);
+      // 第 2 天起还没撞上本专业事件就优先抽一个，保证每局至少一次专业定制
+      const mine = pool.filter((e) => e.major === S.major);
+      const generic = pool.filter((e) => !e.major);
+      if (mine.length && !S.majorSeen && S.day >= 2) ev = pick(mine);
+      else if (mine.length && Math.random() < 0.25) ev = pick(mine);
+      else ev = pick(generic.length ? generic : pool);
+      if (ev.major) S.majorSeen = (S.majorSeen || 0) + 1;
       S.used.push(ev.id);
     }
     S.currentEvent = { id: ev.id, forced: !!ev.forced, scene: ev.scene, title: ev.title, text: ev.text, choices: ev.choices };
@@ -606,7 +613,7 @@ window.FZ = window.FZ || {};
       day: 1, slot: 0,
       stats: Object.assign({}, FZ.BALANCE.start),
       focus: 0, focusMax: 0, decisions: 0, day3Gain: 0,
-      used: [], history: [], tipUsed: false,
+      used: [], history: [], tipUsed: false, majorSeen: 0,
       resultShown: false, finished: false, phase: 'event'
     };
     $('#diff-pill').textContent = FZ.DIFFICULTY[diff].name;
@@ -664,7 +671,9 @@ window.FZ = window.FZ || {};
     const savedMajor = meta.major && FZ.MAJORS.some((m) => m.name === meta.major) ? meta.major : FZ.MAJORS[0].name;
     sel.value = savedMajor;
     applyMajor(savedMajor);
-    if (meta.subject) { $('#subject-input').value = meta.subject; $('#subject-input').dataset.auto = '0'; }
+    // 从存档回填的科目仍算"自动填充"：只有用户本局亲手输入过才锁定，
+    // 否则换专业时会留着上一个专业的科目（临床医学配数据结构）。
+    if (meta.subject) { $('#subject-input').value = meta.subject; $('#subject-input').dataset.auto = '1'; }
 
     $$('.diff-btn').forEach((b) => {
       b.classList.toggle('on', b.dataset.d === (meta.diff || 'normal'));
