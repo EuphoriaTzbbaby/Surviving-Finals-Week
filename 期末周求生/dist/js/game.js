@@ -650,6 +650,8 @@ window.FZ = window.FZ || {};
 
   /* ---------- 初始化 ---------- */
   function buildTitle() {
+    $('#fact-events').textContent = FZ.EVENTS.filter((e) => !e.forced).length;
+    $('#fact-endings').textContent = FZ.ENDINGS.length;
     const sel = $('#major-select');
     sel.innerHTML = FZ.MAJORS.map((m) => `<option value="${m.name}">${m.name}</option>`).join('')
       + '<option value="__custom">自定义专业…</option>';
