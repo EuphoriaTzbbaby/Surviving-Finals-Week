@@ -16,14 +16,14 @@ FZ.MAJORS = [
 ];
 
 FZ.DIFFICULTY = {
-  easy:   { key: 'easy',   name: '佛系', desc: '老师划了重点，遗忘慢', decay: 0.13, recover: 24, swing: 4,  penalty: 0.85 },
-  normal: { key: 'normal', name: '标准', desc: '正常期末周，该背的得背', decay: 0.17, recover: 19, swing: 7,  penalty: 1.0 },
-  hard:   { key: 'hard',   name: '卷王', desc: '闭卷、无重点、全班排名', decay: 0.22, recover: 14, swing: 11, penalty: 1.35 }
+  easy:   { key: 'easy',   name: '佛系', desc: '老师划了重点，遗忘慢', decay: 0.10, recover: 30, swing: 4,  penalty: 0.8 },
+  normal: { key: 'normal', name: '标准', desc: '正常期末周，该背的得背', decay: 0.13, recover: 26, swing: 7,  penalty: 1.0 },
+  hard:   { key: 'hard',   name: '卷王', desc: '闭卷、无重点、全班排名', decay: 0.17, recover: 24, swing: 11, penalty: 1.15 }
 };
 
 FZ.BALANCE = {
   start: { k: 18, s: 85, m: 70, n: 30 },
-  kScale: 0.62,
+  kScale: 1.0,
   focusBonus: 1.2,
   focusCap: 5,
   lowStamina: 25,
@@ -33,13 +33,26 @@ FZ.BALANCE = {
   distractedChance: 0.3,
   distractedLoss: 4,
   kCoef: 0.85,
-  staminaGate: [[45, 4], [25, 0], [0, -22]],
-  mindGate: [[55, 5], [30, 0], [0, -24]],
+  staminaGate: [[45, 4], [25, 0], [0, -14]],
+  mindGate: [[55, 5], [30, 0], [0, -16]],
   netGate: [[60, 4], [40, 2], [0, 0]],
   tiredFocus: 4,
-  tiredFactor: 0.6,
-  mindSleep: 7,
+  tiredFactor: 0.75,
+  mindSleep: 9,
+  examFatigue: 0.5,
   socialTipAt: 72
+};
+
+/* 三科抢时间的期末周：主攻一门 + 同期两门。
+   学习收益只进当前选中的那门，其余两门在后台遗忘并吃心态。
+   数值目标：合理分配 → 三门 65~78 分；全押主攻 → 主攻过、副科挂；摆烂 → 全线崩。 */
+FZ.COURSE = {
+  neglectFrom: 4,
+  neglectStep: 0.7,
+  neglectCap: 2.6,
+  decayPerNeglect: 0.10,
+  decayMultCap: 1.5,
+  startSpread: [40, 34, 30]
 };
 
 FZ.SLOTS = [
@@ -49,7 +62,7 @@ FZ.SLOTS = [
 ];
 
 FZ.STATS = [
-  { key: 'k', name: '知识', color: '#B6F03C', desc: '脑子里真正装进去的东西' },
+  { key: 'k', name: '掌握', color: '#B6F03C', desc: '三科按学分加权的真实掌握度' },
   { key: 's', name: '体力', color: '#FFB020', desc: '撑住下一场通宵的本钱' },
   { key: 'm', name: '心态', color: '#FF3D8B', desc: '崩了就什么都记不住' },
   { key: 'n', name: '人脉', color: '#35D6F5', desc: '关键时刻有人递来重点' }
@@ -60,17 +73,17 @@ FZ.EVENTS = [
     id: 'm1', slot: 'morning', scene: 'library', title: '七点二十的图书馆',
     text: '闸机还没开，门口已经排了三十多人。你手里攥着校园卡，前面那个人带了折叠凳。离{科目}考试还有三天。',
     choices: [
-      { label: '排在队伍里，背单词卡', tag: '卷', study: true, fx: { k: 7, s: -6, m: -3 }, result: '队伍挪得很慢，但你确实背完了两页。膝盖有点酸。' },
+      { label: '排在队伍里，{速记}', tag: '卷', study: true, fx: { k: 7, s: -6, m: -3 }, result: '队伍挪得很慢，但你确实过完了一遍。膝盖有点酸。' },
       { label: '去空教室，没人抢', tag: '稳', study: true, fx: { k: 9, s: -8, m: 4 }, result: '空教室的灯管有点闪，但整张桌子都是你的。效率意外地高。' },
       { label: '回宿舍再睡四十分钟', tag: '躺', fx: { s: 16, m: 8, k: -3 }, result: '四十分钟变成了一小时二十。醒来时世界很安静，你有点心虚。' }
     ]
   },
   {
     id: 'm2', slot: 'morning', scene: 'classroom', title: '早八点名',
-    text: '这门课不考，但老师说了平时分占三成。教室在六楼，你昨晚两点才睡，{科目}一个字没看。',
+    text: '{副科1}今天点名，平时分占三成。教室在六楼，你昨晚两点才睡，{科目}一个字没看。',
     choices: [
-      { label: '去，坐后排偷偷复习', tag: '卷', study: true, fx: { k: 6, s: -10, m: -4 }, result: '老师念到你名字时你答了"到"，同时翻过一页{科目}。 multitasking 达成。' },
-      { label: '去，认真听这门课', tag: '稳', fx: { k: 3, s: -7, m: 7, n: 4 }, result: '意外挺有意思。旁边同学借了你一支笔，加了微信。' },
+      { label: '去，坐后排偷偷复习{科目}', tag: '卷', study: true, fx: { k: 6, s: -10, m: -4 }, result: '老师念到你名字时你答了"到"，同时翻过一页{科目}。 multitasking 达成。' },
+      { label: '去，认真听{副科1}', tag: '稳', to: 1, fx: { k: 9, s: -7, m: 7, n: 4 }, result: '意外挺有意思，{副科1}倒是听进去了一节。旁边同学借了你一支笔，加了微信。' },
       { label: '不去，让室友帮忙答到', tag: '险', requires: { n: 35 }, fx: { k: 10, s: 4, m: -6 }, result: '室友回了个"OK"的手势。你在宿舍多刷了一套{科目}真题，心里有点悬。' }
     ]
   },
@@ -88,7 +101,7 @@ FZ.EVENTS = [
     text: '一个卖包子，一个卖煎饼。排队的人都盯着手机里的{科目}课件。你兜里还剩十七块。',
     choices: [
       { label: '煎饼加双蛋，吃饱再战', tag: '稳', fx: { s: 14, m: 6, k: -1 }, result: '热量到位，脑子终于开始转了。煎饼阿姨还多给了你一片薄脆。' },
-      { label: '买个包子边走边背', tag: '卷', study: true, fx: { k: 6, s: 5, m: -2 }, result: '一手包子一手打印稿，酱汁滴在了第三章的重点上。你把它当成荧光笔。' },
+      { label: '买个包子边走边过重点', tag: '卷', study: true, fx: { k: 6, s: 5, m: -2 }, result: '一手包子一手打印稿，酱汁滴在了第三章的重点上。你把它当成荧光笔。' },
       { label: '不吃，省钱买咖啡', tag: '险', fx: { s: -6, m: 3, k: 4 }, result: '咖啡因上来了，胃在抗议。你决定中午补回来。' }
     ]
   },
@@ -125,7 +138,7 @@ FZ.EVENTS = [
     choices: [
       { label: '再来一杯，今天必须过完', tag: '险', study: true, fx: { k: 12, s: -16, m: -8 }, result: '手在抖，但书确实翻过去了。你能听见自己的心跳。' },
       { label: '换成温水，缓一缓', tag: '稳', fx: { s: 12, m: 8, k: 2 }, result: '心跳慢慢平下来。你发现刚才那两页其实没记住，重新看了一遍。' },
-      { label: '去操场走两圈', tag: '躺', fx: { s: 15, m: 12, k: -2 }, result: '冷空气很有用。走回来的时候你想通了一个一直没懂的推导。' }
+      { label: '去操场走两圈', tag: '躺', fx: { s: 15, m: 12, k: -2 }, result: '冷空气很有用。走回来的时候你想通了{难点}。' }
     ]
   },
   {
@@ -133,17 +146,17 @@ FZ.EVENTS = [
     text: '路过操场，有人在跑步。你已经连续坐了五个小时，腰像一块木板。',
     choices: [
       { label: '跑两公里再回去', tag: '稳', fx: { s: 18, m: 14, k: -3 }, result: '跑完洗了个脸，整个人重启了。后面两小时效率翻倍。' },
-      { label: '站着背书，一举两得', tag: '卷', study: true, fx: { k: 8, s: 4, m: 3 }, result: '站着背确实不容易困。路过的人以为你在打电话。' },
+      { label: '站着{速记}，一举两得', tag: '卷', study: true, fx: { k: 8, s: 4, m: 3 }, result: '站着过一遍确实不容易困。路过的人以为你在打电话。' },
       { label: '直接回自习室继续', tag: '卷', study: true, fx: { k: 10, s: -12, m: -5 }, result: '腰更疼了，但你把那一节推完了。代价是下午一直想趴着。' }
     ]
   },
   {
     id: 'm10', slot: 'morning', scene: 'online', title: '小组作业的催命消息',
-    text: '群里 @了全体：另一门课的小组作业今晚交，你负责的部分还没写。{科目}也还没复习完。',
+    text: '群里 @了全体：{副科1}的小组作业今晚交，你负责的部分还没写。{科目}也还没复习完。',
     choices: [
-      { label: '先把作业写完，做个靠谱的人', tag: '友', fx: { n: 14, m: 5, k: -4, s: -9 }, result: '你按时交了，群里一片"辛苦了"。有人说下次考试请你吃饭。' },
+      { label: '先把作业写完，做个靠谱的人', tag: '友', to: 1, fx: { n: 14, m: 5, k: 8, s: -9 }, result: '你按时交了，群里一片"辛苦了"。写的时候顺手把{副科1}那一章过了一遍。' },
       { label: '和组员说明情况，换一部分', tag: '稳', requires: { n: 30 }, fx: { n: 5, m: 8, k: 5, s: -5 }, result: '组员很爽快地接了过去，说你先顾考试。你欠了一顿奶茶。' },
-      { label: '拖到晚上，先复习', tag: '险', study: true, fx: { k: 11, n: -12, m: -7, s: -8 }, result: '{科目}推进了一大截，但群里已经开始有人阴阳怪气了。' }
+      { label: '拖到晚上，先复习{科目}', tag: '险', study: true, fx: { k: 11, n: -12, m: -7, s: -8 }, result: '{科目}推进了一大截，但群里已经开始有人阴阳怪气了。' }
     ]
   },
   {
@@ -157,7 +170,7 @@ FZ.EVENTS = [
   },
   {
     id: 'm12', slot: 'morning', scene: 'online', title: '手机推送：成绩出了',
-    text: '另一门课的成绩出来了。你点开之前手指停在屏幕上，{科目}的书还摊在腿上。',
+    text: '{副科2}的平时成绩出来了。你点开之前手指停在屏幕上，{科目}的书还摊在腿上。',
     choices: [
       { label: '立刻点开', tag: '险', fx: { m: -10, k: -2, s: -2 }, result: '比预想的低八分。你盯着那个数字看了很久，书一个字没进。' },
       { label: '考完再看，关掉推送', tag: '稳', study: true, fx: { k: 9, m: 6, s: -6 }, result: '关掉通知的瞬间世界安静了。你多看了两节，心里踏实。' },
@@ -176,11 +189,11 @@ FZ.EVENTS = [
   },
   {
     id: 'a2', slot: 'afternoon', scene: 'library', title: '自习室的空调',
-    text: '空调坏了，室温二十九度。周围一片扇子声，{科目}的公式在眼前晃。',
+    text: '空调坏了，室温二十九度。周围一片扇子声，{科目}的{核心}在眼前晃。',
     choices: [
       { label: '换到地下自习室', tag: '稳', study: true, fx: { k: 11, s: -6, m: 6 }, result: '地下凉快，但信号差。你被迫专心，效率反而高了。' },
       { label: '硬扛，不想挪窝', tag: '卷', study: true, fx: { k: 8, s: -14, m: -8 }, result: '汗把打印稿洇湿了一角。你看完了，但记住的不多。' },
-      { label: '买根冰棍，休息二十分钟', tag: '躺', fx: { s: 13, m: 12, k: -2 }, result: '冰棍两块钱，快乐十分钟。回去之后公式终于不晃了。' }
+      { label: '买根冰棍，休息二十分钟', tag: '躺', fx: { s: 13, m: 12, k: -2 }, result: '冰棍两块钱，快乐十分钟。回去之后{核心}终于不晃了。' }
     ]
   },
   {
@@ -202,12 +215,12 @@ FZ.EVENTS = [
     ]
   },
   {
-    id: 'a5', slot: 'afternoon', scene: 'classroom', title: '实验报告还差一份',
-    text: '{专业}的实验报告今晚截止，数据你早就测完了，只差分析和图表。',
+    id: 'a5', slot: 'afternoon', scene: 'classroom', title: '{作业}还差一份',
+    text: '{科目}的{作业}今晚截止，材料你早就攒齐了，只差最后的整理和呈现。',
     choices: [
-      { label: '认真做完，图表画漂亮', tag: '稳', fx: { k: 6, n: 6, m: 6, s: -12 }, result: '报告交上去，助教回了个"做得不错"。虽然花了时间，但心里干净。' },
-      { label: '快速交一版能过的', tag: '险', fx: { k: 3, m: 3, s: -5, n: -3 }, result: '半小时搞定。你知道分析写得很水，但至少不扣分了。' },
-      { label: '先放着，全力复习', tag: '卷', study: true, fx: { k: 14, m: -8, n: -6, s: -9 }, result: '{科目}推进明显，但报告的事一直在后台占着你的内存。' }
+      { label: '认真做完，呈现做漂亮', tag: '稳', study: true, fx: { k: 9, n: 6, m: 6, s: -12 }, result: '{作业}交上去，助教回了个"做得不错"。整理的时候你反而把逻辑串通了。' },
+      { label: '快速交一版能过的', tag: '险', fx: { k: 3, m: 3, s: -5, n: -3 }, result: '半小时搞定。你知道后半部分写得很水，但至少不扣分了。' },
+      { label: '先放着，全力复习', tag: '卷', study: true, fx: { k: 14, m: -8, n: -6, s: -9 }, result: '{科目}推进明显，但{作业}一直在后台占着你的内存。' }
     ]
   },
   {
@@ -230,11 +243,11 @@ FZ.EVENTS = [
   },
   {
     id: 'a8', slot: 'afternoon', scene: 'online', title: '论文查重百分之三十八',
-    text: '另一门课的论文查重结果出来了，百分之三十八，红线是二十。{科目}的书还摊在旁边。',
+    text: '{副科2}的课程论文查重结果出来了，百分之三十八，红线是二十。{科目}的书还摊在旁边。',
     choices: [
-      { label: '立刻逐段改写', tag: '稳', fx: { k: 4, m: 6, s: -14, n: 2 }, result: '改了两个小时降到十九。眼睛很酸，但这颗雷排掉了。' },
+      { label: '立刻逐段改写', tag: '稳', to: 2, fx: { k: 8, m: 6, s: -14, n: 2 }, result: '改了两个小时降到十九。眼睛很酸，但这颗雷排掉了，{副科2}也顺带过了一遍。' },
       { label: '找学长问降重技巧', tag: '友', requires: { n: 40 }, fx: { k: 5, n: 6, m: 10, s: -7 }, result: '学长给了三个句式替换的思路，四十分钟就降下来了。人脉的价值。' },
-      { label: '晚上再改，先复习', tag: '险', study: true, fx: { k: 13, m: -10, s: -10 }, result: '复习推进了，但查重那件事每隔十分钟就冒出来一次。' }
+      { label: '晚上再改，先复习{科目}', tag: '险', study: true, fx: { k: 13, m: -10, s: -10 }, result: '{科目}推进了，但查重那件事每隔十分钟就冒出来一次。' }
     ]
   },
   {
@@ -250,7 +263,7 @@ FZ.EVENTS = [
     id: 'a10', slot: 'afternoon', scene: 'campus', title: '快递驿站的队',
     text: '你买的{科目}辅导书到了，但驿站排队要二十分钟。不带书也能复习，只是少了个抓手。',
     choices: [
-      { label: '排，边排边背手上的稿子', tag: '卷', study: true, fx: { k: 9, s: -7, m: 2 }, result: '队伍里你背完了两页。拿到书的时候有种装备升级的踏实感。' },
+      { label: '排，边排边{速记}', tag: '卷', study: true, fx: { k: 9, s: -7, m: 2 }, result: '队伍里你过完了一轮。拿到书的时候有种装备升级的踏实感。' },
       { label: '让室友顺手帮取', tag: '友', requires: { n: 35 }, fx: { k: 10, n: 4, m: 6, s: -4 }, result: '室友答应了，还顺便帮你带了瓶水。你省下二十分钟做了一套题。' },
       { label: '不取了，用电子版', tag: '躺', fx: { k: 5, s: 4, m: -3 }, result: '电子版能看，但你总忍不住滑到别的 App。书在驿站躺了三天。' }
     ]
@@ -266,7 +279,7 @@ FZ.EVENTS = [
   },
   {
     id: 'a12', slot: 'afternoon', scene: 'online', title: '答疑群里没人说话',
-    text: '{科目}的答疑群安静了一整天。你卡在一个推导上四十分钟了，发出去可能没人回。',
+    text: '{科目}的答疑群安静了一整天。你卡在{难点}上四十分钟了，发出去可能没人回。',
     choices: [
       { label: '发出去，附上自己的思路', tag: '友', fx: { k: 13, n: 10, m: 7, s: -5 }, result: '助教回了，还夸你思路清楚。卡了四十分钟的地方三分钟就通了。' },
       { label: '自己再想三十分钟', tag: '卷', study: true, fx: { k: 10, m: -7, s: -11 }, result: '你想出来了。理解很深，但代价是半小时和一堆掉的头发。' },
@@ -279,8 +292,8 @@ FZ.EVENTS = [
     text: '凌晨零点四十。{科目}还剩两章，明早八点半考。室友已经睡了，台灯是你唯一的光源。',
     choices: [
       { label: '通宵，把两章过完', tag: '险', study: true, fx: { k: 17, s: -26, m: -12 }, result: '四点半你看完了最后一页。窗外开始发白，你的心跳有点乱。' },
-      { label: '看到两点，睡四小时', tag: '稳', study: true, fx: { k: 11, s: -8, m: 4 }, result: '你定了三个闹钟。躺下时脑子还在自动播放公式，但确实睡着了。' },
-      { label: '现在睡，明早五点起来背', tag: '险', study: true, fx: { k: 8, s: 14, m: 6 }, result: '赌明早的状态。躺下的瞬间你既安心又害怕。' }
+      { label: '看到两点，睡四小时', tag: '稳', study: true, fx: { k: 11, s: -8, m: 4 }, result: '你定了三个闹钟。躺下时脑子还在自动播放{核心}，但确实睡着了。' },
+      { label: '现在睡，明早五点起来{速记}', tag: '险', study: true, fx: { k: 8, s: 14, m: 6 }, result: '赌明早的状态。躺下的瞬间你既安心又害怕。' }
     ]
   },
   {
@@ -339,19 +352,19 @@ FZ.EVENTS = [
   },
   {
     id: 'n8', slot: 'night', scene: 'dorm', title: '睡前最后一次刷手机',
-    text: '躺下了，手机还在手里。短视频一条接一条，{科目}的公式在脑子里越来越模糊。',
+    text: '躺下了，手机还在手里。短视频一条接一条，{科目}的{核心}在脑子里越来越模糊。',
     choices: [
       { label: '刷到困为止', tag: '躺', fx: { m: 8, s: -10, k: -7 }, result: '两点十分你终于放下手机。睡眠时间少了两小时，快乐也没多多少。' },
       { label: '放远一点，直接睡', tag: '稳', fx: { s: 20, m: 8, k: 2 }, result: '手机放到桌上了。你睡得比想的快，第二天状态明显好。' },
-      { label: '把手机换成背单词 App', tag: '卷', study: true, fx: { k: 7, s: -6, m: -3 }, result: '背着背着睡着了，手机砸在脸上。至少最后一个画面是知识。' }
+      { label: '把手机换成{刷题App}', tag: '卷', study: true, fx: { k: 7, s: -6, m: -3 }, result: '刷着刷着睡着了，手机砸在脸上。至少最后一个画面是知识。' }
     ]
   },
   {
-    id: 'n9', slot: 'night', scene: 'dorm', title: '突击背书的黄金半小时',
-    text: '据说睡前半小时记的东西最牢。你手上有{科目}的十二个必背定义。',
+    id: 'n9', slot: 'night', scene: 'dorm', title: '突击记忆的黄金半小时',
+    text: '据说睡前半小时记的东西最牢。你手上有{科目}的{必背}。',
     choices: [
-      { label: '全部背完再睡', tag: '卷', study: true, fx: { k: 15, s: -12, m: -4 }, result: '十二个背完躺下，脑子里自动循环。第二天早上居然真的都记得。' },
-      { label: '只背最可能考的五个', tag: '稳', study: true, fx: { k: 11, s: -4, m: 5 }, result: '五个背得很牢。第二天试卷上出现了三个。精准打击。' },
+      { label: '全部过完再睡', tag: '卷', study: true, fx: { k: 15, s: -12, m: -4 }, result: '整份清单过完躺下，脑子里自动循环。第二天早上居然真的都记得。' },
+      { label: '只过最可能考的那几条', tag: '稳', study: true, fx: { k: 11, s: -4, m: 5 }, result: '挑出来的那几条记得很牢。第二天试卷上真出现了。精准打击。' },
       { label: '录成语音，躺着听', tag: '躺', study: true, fx: { k: 7, s: 8, m: 4 }, result: '听着自己的声音睡着了。效果一般，但你睡得很好。' }
     ]
   },
@@ -408,6 +421,68 @@ FZ.EVENTS = [
     ]
   }
 ];
+
+/* 三科抢时间的事件：这些时段会被另外两门课直接占用。
+   to 指定收益进哪门课（0 主攻 / 1 副科一 / 2 副科二），relief 表示重新排了计划、
+   把另外两门的焦虑压下去。没有它们，"其他课程的压力"就只是个数字。 */
+FZ.PRESSURE_EVENTS = [
+  {
+    id: 'p1', slot: 'morning', scene: 'classroom', title: '{副科1}的小测挪到了今天',
+    text: '教务系统弹出通知：{副科1}的随堂测提前到今天上午，占平时分十分。你原本把这个时段全留给了{科目}。',
+    choices: [
+      { label: '去测，认真答', tag: '稳', to: 1, study: true, fx: { k: 14, s: -9, m: -3 }, result: '{副科1}抬了一截。走出教室时你意识到：{科目}这个时段空了。' },
+      { label: '请人帮忙录题，自己留在自习室', tag: '险', requires: { n: 35 }, study: true, fx: { k: 11, s: -6, m: -6, n: -6 }, result: '{科目}推进了。{副科1}那十分你不要了，人情也花掉一点。' },
+      { label: '两门都放一放，先补觉', tag: '躺', fx: { s: 18, m: 9, k: -3 }, result: '你睡了一个半小时。醒来两门都还在原地，但你终于能思考了。' }
+    ]
+  },
+  {
+    id: 'p2', slot: 'morning', scene: 'print', title: '打印店只够印一份',
+    text: '钱包和打印机同时见底。{科目}的历年卷、{副科1}的重点、{副科2}的提纲，只印得起一份。',
+    choices: [
+      { label: '印{科目}的历年卷', tag: '卷', to: 0, study: true, fx: { k: 13, s: -8, m: -4 }, result: '主攻的那门装备齐全。另外两门你打算靠电子版硬撑。' },
+      { label: '印{副科1}的重点，主攻靠平时底子', tag: '稳', to: 1, study: true, fx: { k: 12, s: -7, m: 4 }, result: '你把资源给了更没底的那门。这个决定之后你会想起来两次。' },
+      { label: '三份都拍照，谁的都不印', tag: '躺', fx: { k: 5, s: 4, m: -5 }, result: '相册里躺着三门课。你清楚自己在哪一份上都不会翻第二遍。' }
+    ]
+  },
+  {
+    id: 'p3', slot: 'afternoon', scene: 'online', title: '两个截止撞在同一小时',
+    text: '{副科1}的小组报告和{副科2}的课程小结都在今晚十二点截止。你手上只有一个下午，而{科目}还没动。',
+    choices: [
+      { label: '先清掉两个截止，晚上再复习', tag: '友', to: 1, fx: { k: 10, n: 8, m: 7, s: -13 }, result: '两个都交了。{副科1}顺带过了一轮，但天已经黑了。' },
+      { label: '只交学分高的那个', tag: '稳', to: 2, study: true, fx: { k: 11, m: -4, s: -8 }, result: '你按学分做了取舍，另一份如实说明了情况。心里有点堵，但这是清醒的选择。' },
+      { label: '都不交，全力扑{科目}', tag: '险', to: 0, study: true, fx: { k: 16, n: -10, m: -12, s: -10 }, result: '{科目}推进了一大截。两封未交作业的通知躺在收件箱里，你每次解锁手机都会看到。' }
+    ]
+  },
+  {
+    id: 'p4', slot: 'afternoon', scene: 'library', title: '学长的三科时间表',
+    text: '去年扛过同样这三门的学长发来一张时间表：每门课固定两个时段，剩下的留给睡觉。他说"别追满，追平就行"。',
+    choices: [
+      { label: '照着排，把三门都放进计划', tag: '稳', relief: true, fx: { m: 16, s: 5, k: 4 }, result: '你把三个名字都写进了明天的格子。焦虑没消失，但它有了位置。' },
+      { label: '只借他的{科目}部分', tag: '卷', to: 0, study: true, fx: { k: 12, m: -5, s: -7 }, result: '主攻的部分很好用。另外两门你还是没排进去，它们会在后台继续响。' },
+      { label: '请他讲十分钟，然后自己排', tag: '友', requires: { n: 30 }, relief: true, fx: { k: 8, n: 10, m: 13, s: -4 }, result: '他讲了怎么判断哪门可以低空掠过。你排出来的表比他的更适合你。' }
+    ]
+  },
+  {
+    id: 'p5', slot: 'night', scene: 'dorm', title: '{副科2}的书还没拆封',
+    text: '书架上那本{副科2}的塑封还没撕。学分不低，考在主考后一天。你今晚只剩这一个时段。',
+    choices: [
+      { label: '拆封，从零开始过一遍', tag: '稳', to: 2, study: true, fx: { k: 15, s: -13, m: 5 }, result: '塑封撕开的声音很清脆。两小时后你至少知道这门课在讲什么了。' },
+      { label: '找人要一份速成提纲', tag: '友', requires: { n: 40 }, to: 2, fx: { k: 12, n: -4, m: 8, s: -5 }, result: '提纲只有六页，但覆盖了历年卷八成考点。你今晚睡得着了。' },
+      { label: '不管它，把今晚全给{科目}', tag: '险', to: 0, study: true, fx: { k: 15, m: -9, s: -12 }, result: '{科目}又厚了一层。那本塑封的书在书架上，像一个你假装没看见的倒计时。' }
+    ]
+  },
+  {
+    id: 'p6', slot: 'night', scene: 'online', title: '考试安排出来了',
+    text: '教务系统刷新：{科目}上午八点半，{副科1}下午两点，{副科2}第二天上午。三天，三门，中间没有喘息。',
+    choices: [
+      { label: '按考试顺序倒排剩下的时段', tag: '稳', relief: true, fx: { k: 6, m: 12, s: 4 }, result: '顺序一确定，模糊的恐慌变成了具体的清单。你把它抄在了便利贴上。' },
+      { label: '截图发群里，和大家一起吐槽', tag: '友', fx: { m: 15, n: 12, s: -3, k: -2 }, result: '群里瞬间刷了三十条。发现所有人都在同一条船上，这件事本身就有用。' },
+      { label: '关掉页面，按原计划继续', tag: '卷', study: true, fx: { k: 12, m: -10, s: -9 }, result: '你选择不看。但那个安排已经进了脑子，每隔一会儿就自己弹出来。' }
+    ]
+  }
+];
+
+FZ.PRESSURE_EVENTS.forEach((e) => { e.pressure = true; FZ.EVENTS.push(e); });
 
 /* 专业专属事件：每个专业两条（午后 / 深夜）。
    选临床会撞上标本考试，选建筑会撞上交图通宵——专业不只是换个科目名。 */
@@ -661,35 +736,8 @@ Object.keys(FZ.MAJOR_EVENTS).forEach((name) => {
   });
 });
 
-FZ.EXAM = [
-  {
-    title: '选择题 · 最后五道',
-    text: '这五道你完全没底。监考老师看了眼手表，还剩二十二分钟。',
-    choices: [
-      { label: '用排除法，逐个划掉', fx: { mod: 5, s: -6, m: 3 }, result: '划掉了明显错误的选项，剩下的靠推理。对了两道。' },
-      { label: '全部相信第一直觉', fx: { mod: 3, s: -2, m: 6 }, result: '直觉有时候是对的。你不去想它，心态稳住了。' },
-      { label: '全部选 C，省下时间', fx: { mod: -2, s: 4, m: -4 }, result: '概率学上说得通，但你知道自己在赌。' }
-    ]
-  },
-  {
-    title: '计算大题 · 十四分',
-    text: '这道{科目}的大题你见过类似的，但中间一步卡住了。草稿纸只剩半页。',
-    choices: [
-      { label: '硬算到底，把过程写满', fx: { mod: 6, s: -12, m: -5 }, result: '你算了整整八分钟，最后一步终于通了。手心全是汗。' },
-      { label: '写出能写的步骤，拿步骤分', fx: { mod: 3, s: -5, m: 5 }, result: '公式、代入、思路都写上了。就算答案不对，也能捞回一半。' },
-      { label: '跳过，先做后面的', fx: { mod: 0, s: 2, m: 2 }, result: '你果断放弃，后面的题答得很顺。回头看时已经没时间了。' }
-    ]
-  },
-  {
-    title: '论述题 · 最后一道',
-    text: '题目要求结合{专业}的实际谈谈理解。你脑子里有一堆碎片，但没成体系。剩六分钟。',
-    choices: [
-      { label: '按框架展开，写满答题区', fx: { mod: 5, s: -8, m: -3 }, result: '你把三天里搭的骨架用上了。写到最后一行时铃响。' },
-      { label: '结合自己真实的课程经历写', fx: { mod: 4, s: -4, m: 8 }, result: '写得很具体，有例子。这种答案老师通常愿意给分。' },
-      { label: '套用背过的通用模板', fx: { mod: 1, s: -2, m: 3 }, result: '模板能填满纸面，但你清楚它没回答题目真正问的东西。' }
-    ]
-  }
-];
+/* 考题不再放在这里：每门课的两道真题在 js/subjects.js 的科目档案里，
+   考试按"主攻两题 + 两门副科各一题"组卷，所以卷面上不会出现别的学科的东西。 */
 
 FZ.ENDINGS = [
   { id: 'lost',    seal: '失', title: '卷到失智',     color: '#FF4D4D', rarity: '常见', line: '知识装满了，人没到场。考场上你的大脑拒绝开机。' },
@@ -702,7 +750,10 @@ FZ.ENDINGS = [
   { id: 'nail',    seal: '钉', title: '图书馆钉子户', color: '#B6F03C', rarity: '少见', line: '闭馆音乐是你的下班铃。管理员已经记住你的脸了。' },
   { id: 'slack',   seal: '摆', title: '摆烂幸存者',   color: '#FF3D8B', rarity: '少见', line: '没怎么复习，心态极好，分数居然过了。玄学界的优等生。' },
   { id: 'steady',  seal: '稳', title: '稳如老狗',     color: '#B6F03C', rarity: '稀有', line: '睡够了、背完了、朋友还在。期末周被你打成了一场养生局。' },
-  { id: 'skim',    seal: '掠', title: '低空掠过',     color: '#FFB020', rarity: '常见', line: '六十分万岁，多一分浪费。你精确地完成了任务。' }
+  { id: 'skim',    seal: '掠', title: '低空掠过',     color: '#FFB020', rarity: '常见', line: '六十分万岁，多一分浪费。你精确地完成了任务。' },
+  { id: 'juggle',  seal: '衡', title: '三头六臂',     color: '#B6F03C', rarity: '稀有', line: '三门一起压过来，你一门都没丢。秘诀不是熬，是把时间分清楚了。' },
+  { id: 'sacrifice', seal: '舍', title: '弃车保帅',   color: '#FFB020', rarity: '少见', line: '{科目}保住了，代价写在另一行上。这不是失败，这是期末周的真实算术。' },
+  { id: 'crash',   seal: '塌', title: '全线崩盘',     color: '#FF4D4D', rarity: '少见', line: '三门同时压上来的时候，没有人能全部接住。下次先保住学分最高的那门。' }
 ];
 
 FZ.GRADES = [

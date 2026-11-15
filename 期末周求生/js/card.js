@@ -43,7 +43,7 @@ FZ.Card = (function () {
   function radar(c, cx, cy, r, stats) {
     const keys = ['k', 's', 'm', 'n'];
     const cols = ['#B6F03C', '#FFB020', '#FF3D8B', '#35D6F5'];
-    const names = ['知识', '体力', '心态', '人脉'];
+    const names = ['掌握', '体力', '心态', '人脉'];
     const pt = (i, ratio) => {
       const a = -Math.PI / 2 + i * Math.PI / 2;
       return [cx + Math.cos(a) * r * ratio, cy + Math.sin(a) * r * ratio];
@@ -103,6 +103,69 @@ FZ.Card = (function () {
     c.textAlign = 'left'; c.textBaseline = 'alphabetic';
   }
 
+  function fitFont(c, text, maxW, size, weight, family) {
+    let s = size;
+    c.font = `${weight} ${s}px ${family}`;
+    while (s > 15 && c.measureText(text).width > maxW) { s -= 1; c.font = `${weight} ${s}px ${family}`; }
+    return s;
+  }
+
+  function transcript(c, x, y, w, h, rows, gpa, sans, mono) {
+    const cols = ['#FFB020', '#35D6F5', '#FF3D8B'];
+    rr(c, x, y, w, h, 22);
+    c.fillStyle = 'rgba(8,11,22,0.55)'; c.fill();
+    c.strokeStyle = 'rgba(174,186,224,0.20)'; c.lineWidth = 2; c.stroke();
+
+    c.font = `800 24px ${sans}`;
+    c.fillStyle = '#F3E9D2';
+    c.fillText('三科成绩单', x + 24, y + 42);
+    c.textAlign = 'right';
+    c.font = `700 22px ${mono}`;
+    c.fillStyle = '#FFB020';
+    c.fillText(`绩点 ${gpa}`, x + w - 24, y + 42);
+    c.textAlign = 'left';
+
+    c.strokeStyle = 'rgba(174,186,224,0.16)'; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(x + 24, y + 62); c.lineTo(x + w - 24, y + 62); c.stroke();
+
+    const passed = rows.filter((r) => r.passed).length;
+    c.font = `500 19px ${sans}`;
+    c.fillStyle = '#8E97B8';
+    c.fillText(`${passed} / 3 门及格`, x + 24, y + h - 18);
+
+    const rh = 88, gap = 7, top = y + 76;
+    rows.forEach((r, i) => {
+      const ry = top + i * (rh + gap);
+      const cc = r.passed ? cols[i] : '#FF4D4D';
+      rr(c, x + 20, ry, w - 40, rh, 12);
+      c.fillStyle = r.passed ? 'rgba(174,186,224,0.05)' : 'rgba(255,77,77,0.09)';
+      c.fill();
+      c.fillStyle = cc;
+      c.fillRect(x + 20, ry + 10, 4, rh - 20);
+
+      c.font = `800 17px ${mono}`;
+      c.fillStyle = cc;
+      c.fillText(i === 0 ? '主攻' : '同期', x + 38, ry + 24);
+
+      c.textAlign = 'right';
+      c.font = `800 42px ${mono}`;
+      c.fillStyle = r.passed ? '#F3E9D2' : '#FF4D4D';
+      c.fillText(String(r.score), x + w - 38, ry + 54);
+      c.font = `700 20px ${mono}`;
+      c.fillStyle = cc;
+      c.fillText(r.grade.letter, x + w - 38, ry + 78);
+      c.textAlign = 'left';
+
+      fitFont(c, r.name, 232, 25, 700, sans);
+      c.fillStyle = '#F3E9D2';
+      c.fillText(r.name, x + 38, ry + 54);
+
+      c.font = `500 18px ${sans}`;
+      c.fillStyle = '#8E97B8';
+      c.fillText(`${r.credit} 学分 · ${r.slots} 段 · 掌握 ${r.mastery}%`, x + 38, ry + 78);
+    });
+  }
+
   function render(canvas, d) {
     canvas.width = W; canvas.height = H;
     const c = canvas.getContext('2d');
@@ -160,10 +223,10 @@ FZ.Card = (function () {
 
     c.font = `500 28px ${sans}`;
     c.fillStyle = '#AEB8E0';
-    c.fillText(`${d.major} · ${d.subject}`, 84, 202);
+    c.fillText(`${d.major} · 主攻 ${d.subject}`, 84, 202);
     c.font = `500 24px ${sans}`;
     c.fillStyle = '#8E97B8';
-    c.fillText(`难度 ${d.diffName} · 复习 3 天 · 决策 ${d.decisions} 次`, 84, 244);
+    c.fillText(`难度 ${d.diffName} · 3 天 9 时段 · 决策 ${d.decisions} 次`, 84, 244);
 
     const titleSize = d.ending.title.length > 5 ? 92 : 108;
     c.font = `800 ${titleSize}px ${sans}`;
@@ -205,11 +268,14 @@ FZ.Card = (function () {
 
     c.font = `800 112px ${mono}`;
     c.fillStyle = d.passed ? '#B6F03C' : '#FF4D4D';
-    c.fillText(String(d.score), 124, 616);
+    c.fillText(String(d.score), 124, 610);
     const sw = c.measureText(String(d.score)).width;
     c.font = `500 28px ${sans}`;
     c.fillStyle = '#8E97B8';
-    c.fillText('/ 100', 132 + sw, 616);
+    c.fillText('/ 100', 132 + sw, 610);
+    c.font = `500 21px ${sans}`;
+    c.fillStyle = '#8E97B8';
+    c.fillText('三科按学分加权', 124, 644);
 
     c.textAlign = 'right';
     c.font = `800 66px ${mono}`;
@@ -217,10 +283,15 @@ FZ.Card = (function () {
     c.fillText(d.grade.letter, W - 124, 578);
     c.font = `500 24px ${sans}`;
     c.fillStyle = '#FFB020';
-    c.fillText(`绩点 ${d.grade.point} · ${d.grade.word}`, W - 124, 620);
+    c.fillText(`总绩点 ${d.gpa} · ${d.grade.word}`, W - 124, 620);
     c.textAlign = 'left';
 
-    radar(c, W / 2, 906, 146, d.stats);
+    c.font = `600 22px ${mono}`;
+    c.fillStyle = '#8E97B8';
+    c.fillText('四维状态', 84, 712);
+    radar(c, 310, 920, 112, d.stats);
+
+    transcript(c, 556, 682, 440, 400, d.courses, d.gpa, sans, mono);
 
     rr(c, 84, 1146, W - 168, 150, 22);
     c.fillStyle = 'rgba(243,233,210,0.06)'; c.fill();

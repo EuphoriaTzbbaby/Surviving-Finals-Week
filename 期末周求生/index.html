@@ -59,12 +59,12 @@
     <h1 class="hero-title">
       <span class="l1">期末周</span><span class="l2">求生</span>
     </h1>
-    <p class="hero-sub">三天。<b>九次抉择</b>。四个互相牵制的数值。<br>最后你会拿到一张属于自己的期末人设战绩单。</p>
+    <p class="hero-sub">三天。<b>三门课一起压过来</b>。九个时段，四个互相牵制的数值。<br>最后你会拿到一张写着自己三门成绩的期末人设战绩单。</p>
     <div class="hero-facts">
       <div class="fact"><b>3</b><span>分钟一局</span></div>
-      <div class="fact"><b id="fact-events">60</b><span>个真实事件</span></div>
-      <div class="fact"><b id="fact-endings">11</b><span>种结局</span></div>
-      <div class="fact"><b>0</b><span>注册 / 下载</span></div>
+      <div class="fact"><b id="fact-events">66</b><span>个真实事件</span></div>
+      <div class="fact"><b id="fact-exams">170</b><span>道分科真题</span></div>
+      <div class="fact"><b id="fact-endings">14</b><span>种结局</span></div>
     </div>
   </div>
 
@@ -86,10 +86,20 @@
       <input id="custom-major-input" type="text" maxlength="16" placeholder="例如：考古学">
     </div>
     <div class="field">
-      <label for="subject-input">最怕的那门课</label>
+      <label for="subject-input">最怕的那门课（主攻）</label>
       <input id="subject-input" type="text" list="subject-list" maxlength="16" placeholder="例如：数据结构" autocomplete="off">
       <datalist id="subject-list"></datalist>
       <div class="subject-chips" id="subject-chips"></div>
+    </div>
+
+    <div class="field">
+      <label for="side-1">同期还要考的两门</label>
+      <div class="side-inputs">
+        <input id="side-1" type="text" list="side-list" maxlength="16" placeholder="例如：操作系统" autocomplete="off">
+        <input id="side-2" type="text" list="side-list" maxlength="16" placeholder="例如：编译原理" autocomplete="off">
+      </div>
+      <datalist id="side-list"></datalist>
+      <p class="field-note">已按你的专业填好。这三门抢同一个三天：给了一门，另外两门就在后台遗忘、吃你的心态。</p>
     </div>
 
     <div class="field">
@@ -123,7 +133,7 @@
   <div class="panel collection">
     <div class="panel-head">
       <h2>结局图鉴</h2>
-      <span class="hint"><b class="collection-count">0 / 11</b> 已解锁</span>
+      <span class="hint"><b class="collection-count">0 / 14</b> 已解锁</span>
     </div>
     <div class="col-grid js-collection"></div>
     <p class="col-tip">同一个人设很难拿两次——数值组合决定称号。集齐需要换着法子活。</p>
@@ -132,19 +142,21 @@
   <div class="panel howto">
     <div class="panel-head"><h2>怎么玩</h2><span class="hint">评委五步以内</span></div>
     <ol class="steps">
-      <li><b>1</b><span>选专业、填最怕的科目（已预填，可直接跳过）</span></li>
+      <li><b>1</b><span>选专业，三门课已预填，可直接跳过</span></li>
       <li><b>2</b><span>点「开始这三天」</span></li>
-      <li><b>3</b><span>每个时段读事件，从 2–3 个选项里挑一个</span></li>
-      <li><b>4</b><span>盯住右侧四条数值，别让体力和心态见底</span></li>
-      <li><b>5</b><span>考完生成战绩卡，保存或分享</span></li>
+      <li><b>3</b><span>每个时段先按 <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> 决定攻哪门，再从 2–3 个选项里挑一个</span></li>
+      <li><b>4</b><span>盯住右侧：没碰的课会遗忘、扣心态，体力和心态别见底</span></li>
+      <li><b>5</b><span>三门连考后生成战绩卡，保存或分享</span></li>
     </ol>
     <div class="rules-note">
-      <p><b>知识</b>决定分数上限，但每天睡觉会遗忘一部分。</p>
+      <p><b>掌握</b>是三门课按学分加权的平均值，决定分数上限；每天睡觉三门都会遗忘一部分。</p>
+      <p>一个时段的学习收益<b>只进一门课</b>。连续 3 个时段没碰的课，每时段扣心态，过夜时遗忘还会加速——这就是其他课压在你身上的感觉。</p>
       <p><b>体力</b>低于 25，学进去的东西直接减半；见底会被强制睡过去，进考场还要倒扣 22 分。</p>
       <p><b>心态</b>低于 25 会走神；见底会强制崩一次，进考场还要倒扣 24 分。</p>
       <p><b>人脉</b>解锁借笔记、问学长这些高收益选项，考场上还能兑现成情报分。</p>
-      <p>连续选学习类选项会累积<b>专注</b>，知识额外加成，但体力恢复打折。</p>
-      <p>硬卷不一定赢：<b>该睡就睡</b>的人，通常比通宵的人考得高。</p>
+      <p>连续选学习类选项会累积<b>专注</b>，掌握额外加成，但体力恢复打折。</p>
+      <p>卷面按科目出真题：选数学分析就考 ε-δ 和级数，选民法就考请求权基础，不会串味。</p>
+      <p class="rules-heart">这局游戏想说的其实是一件事：<b>三门一起压过来的时候，取舍不是失败</b>。该睡就睡、把时间分清楚的人，通常比通宵的人考得高。</p>
     </div>
   </div>
 
@@ -171,6 +183,11 @@
       <h2 class="ev-title" id="event-title">七点二十的图书馆</h2>
       <p class="ev-text" id="event-text"></p>
 
+      <div class="course-switch-wrap">
+        <span class="cs-label">这个时段攻哪门</span>
+        <div class="course-switch" id="course-switch"></div>
+      </div>
+
       <div class="choices" id="choices"></div>
 
       <div class="result-box" id="result-box">
@@ -181,15 +198,21 @@
         <span>继续</span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m-5-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <p class="kbd-tip">键盘 <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 选择 · <kbd>空格</kbd> 继续 · <kbd>M</kbd> 静音</p>
+      <p class="kbd-tip">键盘 <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 选择 · <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> 换科目 · <kbd>空格</kbd> 继续 · <kbd>M</kbd> 静音</p>
     </div>
 
     <aside class="side">
+      <div class="panel courses-panel">
+        <div class="panel-head"><h2>三科抢时间</h2><span class="hint">学分加权</span></div>
+        <div class="course-list" id="course-list"></div>
+        <div class="course-pressure" id="course-pressure"></div>
+      </div>
+
       <div class="panel stats-panel">
         <div class="panel-head"><h2>状态</h2><span class="hint">实时</span></div>
         <div class="gauges">
           <div class="gauge" data-k="k" style="--gc:#B6F03C">
-            <div class="g-top"><span class="g-name">知识</span><span class="g-val">18</span></div>
+            <div class="g-top"><span class="g-name">掌握</span><span class="g-val">18</span></div>
             <div class="g-track"><div class="g-fill" style="width:18%"></div></div>
           </div>
           <div class="gauge" data-k="s" style="--gc:#FFB020">
@@ -228,14 +251,18 @@
 <section class="screen" id="screen-exam">
   <div class="exam-banner" id="exam-banner">
     <span class="eb-line"></span>
-    <b>考试日</b>
-    <i id="exam-banner-sub">闭卷 · 120 分钟</i>
+    <b>三科联考</b>
+    <i id="exam-banner-sub">闭卷 · 三门连考</i>
     <span class="eb-line"></span>
   </div>
   <div class="panel exam-panel">
     <div class="exam-head">
-      <span class="exam-step" id="exam-step">第 1 / 3 题</span>
+      <span class="exam-step" id="exam-step">第 1 / 2 题</span>
       <span class="exam-clock" id="exam-clock">剩余 22:00</span>
+    </div>
+    <div class="exam-who">
+      <span class="exam-course" id="exam-course">数据结构</span>
+      <span class="exam-session" id="exam-session">第 1 / 3 场</span>
     </div>
     <h2 class="ev-title" id="exam-title">选择题 · 最后五道</h2>
     <p class="ev-text" id="exam-text"></p>
@@ -286,8 +313,16 @@
           <button class="btn-ghost" id="btn-again"><span>换专业 / 换难度</span></button>
         </div>
       </div>
+      <div class="panel transcript-panel">
+        <div class="panel-head"><h2>三科成绩单</h2><span class="hint" id="result-gpa">总绩点 —</span></div>
+        <div class="transcript" id="transcript"></div>
+        <div class="debrief">
+          <p class="db-alloc" id="debrief-alloc"></p>
+          <p class="db-take" id="debrief-take"></p>
+        </div>
+      </div>
       <div class="panel collection">
-        <div class="panel-head"><h2>结局图鉴</h2><span class="hint"><b class="collection-count">0 / 11</b> 已解锁</span></div>
+        <div class="panel-head"><h2>结局图鉴</h2><span class="hint"><b class="collection-count">0 / 14</b> 已解锁</span></div>
         <div class="col-grid js-collection"></div>
       </div>
     </div>
@@ -311,6 +346,7 @@
 </div>
 
 <script src="js/data.js"></script>
+<script src="js/subjects.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/voice-lines.js"></script>
 <script src="js/voice.js"></script>
