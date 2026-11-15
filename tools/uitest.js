@@ -171,13 +171,14 @@ async function main() {
   let cdp;
   try {
     await waitForHttp(`http://127.0.0.1:${PORT}/json/version`);
+    const isTarget = (t) => t.type === 'page' && !t.url.startsWith('devtools://') && !t.url.startsWith('chrome://');
     let targets;
     for (let i = 0; i < 40; i++) {
       targets = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
-      if (targets.some((t) => t.type === 'page' && t.url.includes('index.html'))) break;
+      if (targets.some(isTarget)) break;
       await sleep(250);
     }
-    const page = targets.find((t) => t.type === 'page' && t.url.includes('index.html'));
+    const page = targets.find(isTarget);
     cdp = await CDP.connect(page.webSocketDebuggerUrl);
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
@@ -369,6 +370,9 @@ async function main() {
     console.log('  重开后屏幕:', await cdp.eval(`document.querySelector('.screen.active').id`));
 
     const errs = cdp.consoleErrors();
+    const voice = await cdp.eval(`({ mode: FZ.Voice.mode(), supported: FZ.Voice.supported() })`);
+    console.log('  语音模式:', voice.mode, '· 可用:', voice.supported);
+    if (voice.mode !== 'clip') note('语音退回了系统 TTS，自制音色片段没播成');
     if (errs.length) errs.forEach((e) => note('控制台: ' + e));
     else console.log('  控制台 0 报错');
     if (!sawPlaceholder) console.log('  占位符全部替换');
