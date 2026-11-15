@@ -351,13 +351,16 @@ window.FZ = window.FZ || {};
 
     const worst = Math.min.apply(null, Object.values(deltas));
     const net = Object.values(deltas).reduce((a, b) => a + b, 0);
-    if (worst <= -15) { shake(-worst); flash('rgba(255,77,77,0.42)'); FZ.Audio.play('loss'); }
-    else if (net > 0) FZ.Audio.play('gain');
+    const TIMBRE = { k: 'K', s: 'S', m: 'M', n: 'P' };
+    const up = FZ.STATS.reduce((a, b) => (deltas[b.key] || 0) > (deltas[a.key] || 0) ? b : a, FZ.STATS[0]).key;
+    const down = FZ.STATS.reduce((a, b) => (deltas[b.key] || 0) < (deltas[a.key] || 0) ? b : a, FZ.STATS[0]).key;
+    if (worst <= -15) { shake(-worst); flash('rgba(255,77,77,0.42)'); FZ.Audio.play('loss' + TIMBRE[down]); }
+    else if (net > 0) FZ.Audio.play('gain' + TIMBRE[up]);
     else FZ.Audio.play('mixed');
-    if (ch.study && S.focus >= 3) setTimeout(() => FZ.Audio.play('combo'), 180);
+    if (ch.study && S.focus >= 3) setTimeout(() => FZ.Audio.play('combo', { level: S.focus }), 180);
     if (ch.study && S.focus === 3) setTimeout(() => FZ.Voice.say('focus'), 420);
-    if (pre.s >= FZ.BALANCE.lowStamina && S.stats.s < FZ.BALANCE.lowStamina) setTimeout(() => { FZ.Audio.play('warn'); FZ.Voice.say('warnS'); toast('体力跌破 25，知识获取减半', '#FFB020'); }, 320);
-    if (pre.m >= FZ.BALANCE.lowMind && S.stats.m < FZ.BALANCE.lowMind) setTimeout(() => { FZ.Audio.play('warn'); FZ.Voice.say('warnM'); toast('心态跌破 25，开始容易走神', '#FF3D8B'); }, 320);
+    if (pre.s >= FZ.BALANCE.lowStamina && S.stats.s < FZ.BALANCE.lowStamina) setTimeout(() => { FZ.Audio.play('warnS'); FZ.Voice.say('warnS'); toast('体力跌破 25，知识获取减半', '#FFB020'); }, 320);
+    if (pre.m >= FZ.BALANCE.lowMind && S.stats.m < FZ.BALANCE.lowMind) setTimeout(() => { FZ.Audio.play('warnM'); FZ.Voice.say('warnM'); toast('心态跌破 25，开始容易走神', '#FF3D8B'); }, 320);
     if (S.distracted) { setTimeout(() => toast('走神了，这次记住的比预期少', '#FF3D8B'), 500); S.distracted = false; }
 
     S.history.push({
@@ -486,7 +489,7 @@ window.FZ = window.FZ || {};
     }
     $$('#exam-choices .choice').forEach((b) => { b.disabled = true; b.classList.add('faded'); });
     if (e && e.currentTarget) e.currentTarget.classList.remove('faded');
-    FZ.Audio.play(ch.fx.mod >= 6 ? 'gain' : 'mixed');
+    FZ.Audio.play(ch.fx.mod >= 6 ? 'gainK' : (ch.fx.mod >= 2 ? 'mixed' : 'lossM'));
     setTimeout(() => FZ.Voice.say(ch.fx.mod >= 6 ? 'examGood' : 'examBad'), 260);
     const rb = $('#exam-result');
     rb.classList.add('on');
@@ -838,6 +841,7 @@ window.FZ = window.FZ || {};
 
     document.addEventListener('pointerdown', function once() {
       FZ.Audio.unlock();
+      FZ.Voice.unlock();
       document.removeEventListener('pointerdown', once);
     }, { once: true });
   }
