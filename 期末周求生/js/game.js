@@ -96,6 +96,8 @@ window.FZ = window.FZ || {};
     return drain * FZ.DIFFICULTY[S.diff].penalty;
   }
 
+  function worldOn() { return !!FZ.World && FZ.World.isOk() && document.body.classList.contains('world-on'); }
+
   /* ---------- 屏幕路由 ---------- */
   function show(id) {
     $$('.screen').forEach((el) => el.classList.toggle('active', el.id === id));
@@ -218,6 +220,7 @@ window.FZ = window.FZ || {};
     if (cold.length) notes.push({ t: `${cold.map((c) => c.name).join('、')} 已冷落，每时段扣心态`, c: '#FF4D4D' });
     $('#status-note').innerHTML = notes.map((n) =>
       `<span style="--nc:${n.c}">${n.t}</span>`).join('');
+    if (worldOn()) FZ.World.setStats(S.stats);
   }
 
   const COURSE_COLORS = ['#FFB020', '#35D6F5', '#FF3D8B'];
@@ -253,6 +256,9 @@ window.FZ = window.FZ || {};
       ? `<b>后台压力 −${drain.toFixed(1)} 心态 / 时段</b><i>没碰的课不会安静等着，它一直在占你的脑子。</i>`
       : `<b>三门都在计划里</b><i>保持住。冷落的课会从第 ${C.neglectFrom} 个时段开始扣心态。</i>`;
     $('#course-pressure').classList.toggle('hot', drain > 0);
+    const warn = $('#peek-warn');
+    if (warn) warn.textContent = drain > 0 ? `−${drain.toFixed(1)}` : '';
+    if (worldOn()) FZ.World.setCourses(S.courses, S.active);
   }
 
   function setActive(ci, silent) {
@@ -328,7 +334,7 @@ window.FZ = window.FZ || {};
     return null;
   }
 
-  function renderEvent() {
+  function renderEventHead() {
     const ev = S.currentEvent;
     const slot = FZ.SLOTS[S.slot];
     $('#day-label').textContent = `第 ${S.day} 天`;
@@ -342,11 +348,24 @@ window.FZ = window.FZ || {};
     $('#result-box').classList.remove('on');
     $('#btn-next').classList.remove('on');
 
-    typeInto($('#event-text'), fill(ev.text), 13, () => renderChoices(ev));
     renderStats(); renderTimeline(); renderCourses();
   }
 
+  function renderEventNarrative() {
+    const ev = S.currentEvent;
+    if (!ev) return;
+    typeInto($('#event-text'), fill(ev.text), 13, () => renderChoices(ev));
+  }
+
+  function renderEvent() {
+    renderEventHead();
+    renderEventNarrative();
+  }
+
   function renderChoices(ev) {
+    // 漫游中切课 / 已结算后都不该留下可点的旧按钮：到达时的打字结束回调会把它们复活
+    if (S.resultShown) return;
+    if (worldOn() && FZ.World.isRoaming()) return;
     const box = $('#choices');
     box.innerHTML = '';
     ev.choices.forEach((ch, i) => {
@@ -408,7 +427,16 @@ window.FZ = window.FZ || {};
     S.phase = 'event';
     saveRun();
     show('screen-game');
-    renderEvent();
+    if (worldOn()) {
+      renderEventHead();
+      $('#event-text').textContent = '';
+      $('#roam-day').textContent = S.day;
+      $('#roam-slot').textContent = FZ.SLOTS[S.slot].full;
+      $('#roam-teaser').textContent = `「${fill(ev.title)}」——走过去，这件事就会发生。`;
+      FZ.World.beginSlot({ scene: ev.scene, day: S.day, slot: S.slot, label: FZ.SLOTS[S.slot].full + ' · 事件在这里' });
+    } else {
+      renderEvent();
+    }
   }
 
   /* ---------- 选择结算 ---------- */
@@ -489,6 +517,7 @@ window.FZ = window.FZ || {};
     if (worst <= -15) { shake(-worst); flash('rgba(255,77,77,0.42)'); FZ.Audio.play('loss' + TIMBRE[down]); }
     else if (net > 0) FZ.Audio.play('gain' + TIMBRE[up]);
     else FZ.Audio.play('mixed');
+    if (worldOn()) FZ.World.pulse(worst <= -15 ? 'bad' : net > 0 ? 'good' : 'mid', FZ.STATS.find((x) => x.key === (worst <= -15 ? down : up)).color);
     if (ch.study && S.focus >= 3) setTimeout(() => FZ.Audio.play('combo', { level: S.focus }), 180);
     if (ch.study && S.focus === 3) setTimeout(() => FZ.Voice.say('focus'), 420);
     if (pre.s >= FZ.BALANCE.lowStamina && S.stats.s < FZ.BALANCE.lowStamina) setTimeout(() => { FZ.Audio.play('warnS'); FZ.Voice.say('warnS'); toast('体力跌破 25，知识获取减半', '#FFB020'); }, 320);
@@ -576,6 +605,7 @@ window.FZ = window.FZ || {};
       <div class="de-stat"><span style="color:${st.color}">${st.name}</span>
       <b>${Math.round(S.stats[st.key])}</b></div>`).join('');
     $('#overlay-dayend').classList.add('on');
+    if (worldOn()) FZ.World.setPhase('dayend');
     FZ.Audio.play('dayend');
     setTimeout(() => FZ.Voice.say('night'), 700);
     S.phase = 'dayend';
@@ -604,6 +634,7 @@ window.FZ = window.FZ || {};
     S.courses.forEach((c) => { c.examMod = 0; });
     saveRun();
     show('screen-exam');
+    if (worldOn()) FZ.World.setPhase('exam');
     $('#exam-banner-sub').textContent = `${S.courses.map((c) => c.name).join(' · ')} · 闭卷`;
     $('#exam-banner').classList.add('on');
     FZ.Audio.play('exam');
@@ -798,6 +829,7 @@ window.FZ = window.FZ || {};
     $('#unlock-name').textContent = ending.title;
 
     show('screen-result');
+    if (worldOn()) FZ.World.setPhase('result');
     renderCollection();
     renderHistory();
 
@@ -844,6 +876,7 @@ window.FZ = window.FZ || {};
     S.courses = makeCourses([subject].concat(sides));
     syncK();
     $('#diff-pill').textContent = FZ.DIFFICULTY[diff].name;
+    if (worldOn()) FZ.World.place(-21.4, -0.4, 0.764);
     FZ.Voice.say('start');
     nextEvent();
     const how = window.matchMedia('(max-width: 620px)').matches ? '点科目按钮' : '用 Q / W / E';
@@ -852,6 +885,7 @@ window.FZ = window.FZ || {};
 
   function resumeRun(r) {
     S = r;
+    if (worldOn()) FZ.World.place(-21.4, -0.4, 0.764);
     S.used = S.used || [];
     S.history = S.history || [];
     S.active = S.active || 0;
@@ -859,7 +893,7 @@ window.FZ = window.FZ || {};
     if (S.phase === 'dayend') { show('screen-game'); renderStats(); renderTimeline(); renderCourses(); overnight(S.day - 1); return; }
     if (S.phase === 'exam') {
       if (!S.examPlan || !S.examPlan.length) S.examPlan = buildExamPlan();
-      show('screen-exam'); renderExam(); return;
+      show('screen-exam'); if (worldOn()) FZ.World.setPhase('exam'); renderExam(); return;
     }
     const ev = FZ.EVENTS.find((e) => e.id === (S.currentEvent && S.currentEvent.id));
     if (!ev) { nextEvent(); return; }
@@ -883,38 +917,87 @@ window.FZ = window.FZ || {};
   }
 
   /* ---------- 初始化 ---------- */
-  function syncChips() {
-    const v = $('#subject-input').value;
-    $$('#subject-chips .chip').forEach((c) => c.classList.toggle('on', c.dataset.s === v));
-  }
+  const CUSTOM = '__custom';
+  const COURSE_IDS = ['#subject-select', '#side-1', '#side-2'];
 
   function majorName() {
     const sel = $('#major-select');
-    return sel.value === '__custom' ? ($('#custom-major-input').value.trim() || '自定义专业') : sel.value;
+    return sel.value === CUSTOM ? ($('#custom-major-input').value.trim() || '自定义专业') : sel.value;
   }
 
-  function sidePool() {
-    const m = FZ.MAJORS.find((x) => x.name === $('#major-select').value);
-    const main = $('#subject-input').value.trim();
-    if (m) return m.subjects.filter((s) => s !== main);
+  function majorOf() {
+    return FZ.MAJORS.find((x) => x.name === $('#major-select').value) || null;
+  }
+
+  /* 主攻的取值：选「自定义课程…」时读旁边那个输入框 */
+  function mainValue() {
+    const v = $('#subject-select').value;
+    return v === CUSTOM ? ($('#custom-subject-input').value.trim() || '自定义课程') : v;
+  }
+
+  function recommended() {
+    const m = majorOf();
+    if (m) return m.subjects.slice();
     const n = majorName();
-    return [n + '导论', n + '专题研究'].filter((s) => s !== main);
+    return [n + '导论', n + '专题研究', n + '方法论'];
+  }
+
+  /* 72 门课都带自己的真题库，按专业分组供选；本专业的排在最前面 */
+  function courseOptions(taken, esc) {
+    const m = majorOf();
+    const groups = [{ label: m ? `本专业推荐 · ${m.name}` : `按「${majorName()}」生成`, items: recommended() }];
+    FZ.MAJORS.forEach((x) => {
+      if (m && x.name === m.name) return;
+      groups.push({ label: x.name, items: x.subjects });
+    });
+    return groups.map((g) => `<optgroup label="${esc(g.label)}">` + g.items.map((s) =>
+      `<option value="${esc(s)}"${taken.includes(s) ? ' disabled' : ''}>${esc(s)}${taken.includes(s) ? '（已选）' : ''}</option>`
+    ).join('') + '</optgroup>').join('');
+  }
+
+  /* 三个下拉互相排除，主攻额外可以自定义。want 用来在重建选项后指定选中值 */
+  function syncCourseSelects(want) {
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const cur = [$('#subject-select').value, $('#side-1').value, $('#side-2').value];
+    const vals = cur.map((v, i) => (want && want[i]) || v);
+    COURSE_IDS.forEach((id, i) => {
+      const el = $(id);
+      const taken = vals.filter((v, j) => j !== i && v && v !== CUSTOM);
+      const keep = vals[i];
+      const listed = recommended().concat(Object.keys(FZ.SUBJECTS));
+      // 存档里可能存着课表外的自定义课名，补一个分组保住它
+      const extra = keep && keep !== CUSTOM && !listed.includes(keep)
+        ? `<optgroup label="当前选择"><option value="${esc(keep)}">${esc(keep)}</option></optgroup>` : '';
+      el.innerHTML = extra + courseOptions(taken, esc)
+        + (i === 0 ? `<option value="${CUSTOM}">自定义课程…</option>` : '');
+      el.value = keep;
+      if (el.selectedIndex < 0) el.selectedIndex = 0;
+    });
+    const isCustom = $('#subject-select').value === CUSTOM;
+    $('#custom-subject').classList.toggle('on', isCustom);
+    const main = mainValue();
+    const known = !!FZ.SUBJECTS[main];
+    $('#subject-note').textContent = known
+      ? `《${main}》有专属真题与词库，事件和考卷都按这门课出题。`
+      : `《${main}》不在 72 门课库里，事件用通用词库、考卷用通用题型。`;
+    $('#subject-note').classList.toggle('off', !known);
   }
 
   function autoSides() {
-    const pool = sidePool();
-    const taken = [$('#subject-input').value.trim()];
-    ['#side-1', '#side-2'].forEach((sel, i) => {
-      const el = $(sel);
-      if (el.dataset.auto === '0' && el.value.trim() && !taken.includes(el.value.trim())) {
-        taken.push(el.value.trim());
-        return;
-      }
-      const v = pool.find((s) => !taken.includes(s)) || pool[i] || '';
-      el.value = v;
+    const pool = recommended().concat(Object.keys(FZ.SUBJECTS));
+    const main = mainValue();
+    const want = [null, null, null];
+    const taken = [main];
+    ['#side-1', '#side-2'].forEach((id, i) => {
+      const el = $(id);
+      const cur = el.value;
+      if (el.dataset.auto === '0' && cur && !taken.includes(cur)) { taken.push(cur); return; }
+      const v = pool.find((s) => !taken.includes(s)) || `${majorName()}专题${i + 2}`;
+      want[i + 1] = v;
       el.dataset.auto = '1';
       taken.push(v);
     });
+    syncCourseSelects(want);
   }
 
   let titleBound = false;
@@ -927,20 +1010,16 @@ window.FZ = window.FZ || {};
     $('#fact-exams').textContent = bank.reduce((a, p) => a + p.exam.length, FZ.GENERIC_EXAM.length);
     const sel = $('#major-select');
     sel.innerHTML = FZ.MAJORS.map((m) => `<option value="${m.name}">${m.name}</option>`).join('')
-      + '<option value="__custom">自定义专业…</option>';
+      + `<option value="${CUSTOM}">自定义专业…</option>`;
     const applyMajor = (name) => {
       const m = FZ.MAJORS.find((x) => x.name === name);
-      const list = m ? m.subjects : [];
-      $('#subject-list').innerHTML = list.map((s) => `<option value="${s}">`).join('');
-      $('#side-list').innerHTML = list.map((s) => `<option value="${s}">`).join('');
-      $('#subject-chips').innerHTML = list.map((s) => `<button type="button" class="chip" data-s="${s}">${s}</button>`).join('');
-      if (m && (!$('#subject-input').value || $('#subject-input').dataset.auto === '1')) {
-        $('#subject-input').value = m.subjects[0];
-        $('#subject-input').dataset.auto = '1';
-      }
-      $('#custom-major').classList.toggle('on', name === '__custom');
-      if (name === '__custom') $('#custom-major-input').focus();
-      syncChips();
+      const wantMain = $('#subject-select').dataset.auto === '0' && $('#subject-select').value !== CUSTOM
+        ? $('#subject-select').value
+        : (m ? m.subjects[0] : recommended()[0]);
+      $('#subject-select').dataset.auto = '1';
+      $('#custom-major').classList.toggle('on', name === CUSTOM);
+      if (name === CUSTOM) $('#custom-major-input').focus();
+      syncCourseSelects([wantMain, null, null]);
       autoSides();
     };
 
@@ -948,25 +1027,33 @@ window.FZ = window.FZ || {};
       titleBound = true;
       sel.addEventListener('change', () => {
         FZ.Audio.play('tap');
-        $('#subject-input').dataset.auto = '1';
         $('#side-1').dataset.auto = '1';
         $('#side-2').dataset.auto = '1';
         applyMajor(sel.value);
       });
-      $('#subject-input').addEventListener('input', (e) => { e.target.dataset.auto = '0'; syncChips(); autoSides(); });
-      $('#subject-chips').addEventListener('click', (e) => {
-        const b = e.target.closest('.chip');
-        if (!b) return;
+      $('#subject-select').addEventListener('change', (e) => {
         FZ.Audio.play('tap');
-        $('#subject-input').value = b.dataset.s;
-        $('#subject-input').dataset.auto = '1';
-        syncChips(); autoSides();
+        e.target.dataset.auto = '0';
+        if (e.target.value === CUSTOM) $('#custom-subject-input').focus();
+        autoSides();
+      });
+      $('#custom-subject-input').addEventListener('input', () => {
+        $('#subject-select').dataset.auto = '0';
+        autoSides();
       });
       ['#side-1', '#side-2'].forEach((s) => {
-        $(s).addEventListener('input', (e) => { e.target.dataset.auto = '0'; });
-        $(s).addEventListener('change', () => autoSides());
+        $(s).addEventListener('change', (e) => {
+          FZ.Audio.play('tap');
+          e.target.dataset.auto = '0';
+          syncCourseSelects();
+        });
       });
-      $('#custom-major-input').addEventListener('input', () => autoSides());
+      $('#custom-major-input').addEventListener('input', () => {
+        $('#subject-select').dataset.auto = '1';
+        $('#side-1').dataset.auto = '1';
+        $('#side-2').dataset.auto = '1';
+        applyMajor(CUSTOM);
+      });
       $$('.diff-btn').forEach((b) => {
         b.addEventListener('click', () => {
           FZ.Audio.play('tap');
@@ -980,14 +1067,19 @@ window.FZ = window.FZ || {};
     const savedMajor = meta.major && FZ.MAJORS.some((m) => m.name === meta.major) ? meta.major : FZ.MAJORS[0].name;
     sel.value = savedMajor;
     applyMajor(savedMajor);
-    // 从存档回填的科目仍算"自动填充"：只有用户本局亲手输入过才锁定，
+    // 从存档回填的科目仍算"自动填充"：只有用户本局亲手选过才锁定，
     // 否则换专业时会留着上一个专业的科目（临床医学配数据结构）。
-    if (meta.subject) { $('#subject-input').value = meta.subject; $('#subject-input').dataset.auto = '1'; }
-    if (meta.sides && meta.sides.length === 2) {
-      $('#side-1').value = meta.sides[0]; $('#side-1').dataset.auto = '1';
-      $('#side-2').value = meta.sides[1]; $('#side-2').dataset.auto = '1';
+    if (meta.subject) {
+      const known = Object.keys(FZ.SUBJECTS).includes(meta.subject) || recommended().includes(meta.subject);
+      if (known) $('#subject-select').value = meta.subject;
+      else { $('#subject-select').value = CUSTOM; $('#custom-subject-input').value = meta.subject; }
+      $('#subject-select').dataset.auto = '1';
     }
-    syncChips();
+    if (meta.sides && meta.sides.length === 2) {
+      $('#side-1').dataset.auto = '1';
+      $('#side-2').dataset.auto = '1';
+      syncCourseSelects([$('#subject-select').value, meta.sides[0], meta.sides[1]]);
+    }
     autoSides();
 
     $$('.diff-btn').forEach((b) => b.classList.toggle('on', b.dataset.d === (meta.diff || 'normal')));
@@ -1000,22 +1092,9 @@ window.FZ = window.FZ || {};
 
   function currentSetup() {
     const major = majorName();
-    let subject = $('#subject-input').value.trim();
-    if (!subject) {
-      const m = FZ.MAJORS.find((x) => x.name === $('#major-select').value);
-      subject = m ? m.subjects[0] : major + '导论';
-      $('#subject-input').value = subject;
-    }
+    const subject = mainValue();
     autoSides();
-    const pool = sidePool();
-    const taken = [subject];
-    const sides = ['#side-1', '#side-2'].map((s, i) => {
-      let v = $(s).value.trim();
-      if (!v || taken.includes(v)) v = pool.find((x) => !taken.includes(x)) || `${major}专题${i + 2}`;
-      $(s).value = v;
-      taken.push(v);
-      return v;
-    });
+    const sides = ['#side-1', '#side-2'].map((s) => $(s).value);
     const diff = ($$('.diff-btn').find((b) => b.classList.contains('on')) || { dataset: { d: 'normal' } }).dataset.d;
     return { major, subject, diff, sides };
   }
@@ -1042,6 +1121,7 @@ window.FZ = window.FZ || {};
     $('#btn-dayend-next').addEventListener('click', () => {
       FZ.Audio.play('page');
       $('#overlay-dayend').classList.remove('on');
+      if (worldOn()) FZ.World.place(-21.4, -0.4, 0.764);
       nextEvent();
     });
     $('#event-text').addEventListener('click', skipType);
@@ -1064,12 +1144,14 @@ window.FZ = window.FZ || {};
       FZ.Audio.play('page');
       $('#overlay-dayend').classList.remove('on');
       buildTitle(); show('screen-title');
+      if (worldOn()) FZ.World.setPhase('title');
     });
 
     $('#btn-again').addEventListener('click', () => {
       FZ.Audio.play('page');
       $('#card-wrap').classList.remove('stamped');
       buildTitle(); show('screen-title');
+      if (worldOn()) FZ.World.setPhase('title');
     });
     $('#btn-quick-again').addEventListener('click', () => {
       FZ.Audio.play('page');
@@ -1106,6 +1188,31 @@ window.FZ = window.FZ || {};
       }
     });
 
+    $('#btn-go').addEventListener('click', () => {
+      FZ.Audio.play('tap');
+      FZ.World.goTo();
+    });
+
+    $('#btn-courses').addEventListener('click', () => {
+      FZ.Audio.play('tap');
+      $('.courses-panel').classList.toggle('on');
+    });
+
+    $('#quality-select').addEventListener('change', (e) => {
+      FZ.World.setQuality(e.target.value);
+      meta.quality = e.target.value; saveMeta();
+      toast(`画质：${{ high: '高', mid: '中', low: '低' }[e.target.value]}`, '#35D6F5');
+    });
+
+    $('#btn-3d').addEventListener('click', () => {
+      if (!FZ.World.isOk()) { toast('这台设备不支持 WebGL，已用平面模式', '#FFB020'); return; }
+      const on = !document.body.classList.contains('world-on');
+      set3D(on);
+      meta.world = on; saveMeta();
+      FZ.Audio.play('tap');
+      toast(on ? '三维校园已开启：W A S D 行走' : '已切回平面模式', '#35D6F5');
+    });
+
     $('#btn-copy-link').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(location.href); toast('链接已复制', '#35D6F5'); }
       catch (e) { toast('复制失败，请手动复制地址栏', '#FFB020'); }
@@ -1117,6 +1224,10 @@ window.FZ = window.FZ || {};
       if (e.key === 'm' || e.key === 'M') { $('#btn-sound').click(); return; }
       if (e.key === 'Escape') { skipType(); return; }
       if ($('#screen-game').classList.contains('active')) {
+        if (worldOn() && FZ.World.isRoaming()) {
+          if (e.key === ' ' || e.key === 'Enter' || String(e.key).toLowerCase() === 'f') { e.preventDefault(); FZ.World.goTo(); }
+          return;
+        }
         const ci = ['q', 'w', 'e'].indexOf(String(e.key).toLowerCase());
         if (ci > -1 && S && !S.resultShown) { e.preventDefault(); setActive(ci); return; }
         if (e.key === ' ' || e.key === 'Enter') {
@@ -1154,6 +1265,37 @@ window.FZ = window.FZ || {};
     b.querySelector('.snd-off').style.display = on ? 'none' : '';
   }
 
+  /* 三维 / 平面切换：关掉时立刻补上本来要等走到才播的剧情，不会卡住对局 */
+  function set3D(on) {
+    const b = $('#btn-3d');
+    document.body.classList.toggle('world-on', on);
+    b.classList.toggle('off', !on);
+    b.setAttribute('aria-pressed', String(on));
+    b.querySelector('.d3-label').textContent = on ? '三维' : '平面';
+    if (!on) {
+      document.body.dataset.wphase = 'off';
+      FZ.World.stop();
+      $('.courses-panel').classList.remove('on');
+      if (S && S.currentEvent && !S.resultShown && $('#screen-game').classList.contains('active') && !$('#event-text').textContent) renderEventNarrative();
+      return;
+    }
+    FZ.World.start();
+    FZ.World.resize();
+    if (!S || S.finished) FZ.World.setPhase('title');
+    else if (S.phase === 'exam') FZ.World.setPhase('exam');
+    else if (S.phase === 'dayend') FZ.World.setPhase('dayend');
+    else if ($('#screen-game').classList.contains('active')) {
+      if ($('#event-text').textContent) FZ.World.setPhase('event');
+      else {
+        FZ.World.beginSlot({ scene: S.currentEvent.scene, day: S.day, slot: S.slot, label: FZ.SLOTS[S.slot].full + ' · 事件在这里' });
+        $('#roam-day').textContent = S.day;
+        $('#roam-slot').textContent = FZ.SLOTS[S.slot].full;
+        $('#roam-teaser').textContent = `「${fill(S.currentEvent.title)}」——走过去，这件事就会发生。`;
+      }
+    }
+    if (S && !S.finished) { renderStats(); renderCourses(); }
+  }
+
   function boot() {
     FZ.Audio.setEnabled(meta.sound !== false);
     syncSound();
@@ -1166,6 +1308,33 @@ window.FZ = window.FZ || {};
       $('#btn-sound').classList.add('off');
       $('#btn-sound').querySelector('.snd-label').textContent = '不支持';
     }
+
+    const veil = $('#world-veil');
+    veil.classList.add('on');
+    // 让加载动画先画一帧，再同步建场景
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      let built = false;
+      try { built = FZ.World.init($('#world')); } catch (err) { built = false; console.warn('三维初始化失败，回落平面模式', err); }
+      if (built) {
+        FZ.World.onArrive(() => {
+          if (!S || !S.currentEvent || S.resultShown) return;
+          FZ.Audio.play('page');
+          renderEventNarrative();
+        });
+        const q = meta.quality || FZ.World.quality();
+        $('#quality-select').value = q;
+        if (q !== FZ.World.quality()) FZ.World.setQuality(q);
+        set3D(meta.world !== false);
+      } else {
+        document.body.classList.remove('world-on');
+        document.body.dataset.wphase = 'off';
+        $('#btn-3d').classList.add('off');
+        $('#btn-3d').querySelector('.d3-label').textContent = '平面';
+        $('#quality-select').disabled = true;
+      }
+      veil.classList.add('off');
+      setTimeout(() => veil.classList.remove('on', 'off'), 700);
+    }));
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

@@ -11,6 +11,16 @@
 </head>
 <body>
 
+<div id="world" aria-hidden="true"></div>
+<div id="world-scrim" aria-hidden="true"></div>
+<div id="world-veil">
+  <div class="wv-inner">
+    <span class="wv-mark"></span>
+    <b>正在生成三维校园</b>
+    <i>宿舍 · 图书馆 · 教学楼 · 食堂 · 打印店</i>
+  </div>
+</div>
+
 <div class="bg" aria-hidden="true">
   <div class="bg-mesh"></div>
   <div class="bg-aurora a1"></div>
@@ -38,6 +48,18 @@
   <div class="top-right">
     <span class="pill" id="run-progress">未开局</span>
     <span class="pill diff" id="diff-pill">标准</span>
+    <div class="select-wrap top-sel">
+      <select id="quality-select" title="三维画质" aria-label="三维画质">
+        <option value="high">画质 高</option>
+        <option value="mid">画质 中</option>
+        <option value="low">画质 低</option>
+      </select>
+      <span class="sel-arrow">▾</span>
+    </div>
+    <button class="icon-btn" id="btn-3d" aria-pressed="true" title="三维 / 平面切换">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".7"/></svg>
+      <span class="d3-label">三维</span>
+    </button>
     <button class="icon-btn" id="btn-sound" aria-pressed="true" title="音效开关（M）">
       <svg class="snd-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
       <svg class="snd-off" viewBox="0 0 24 24" aria-hidden="true" style="display:none"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -56,6 +78,7 @@
 <section class="screen active" id="screen-title">
   <div class="hero">
     <div class="hero-badge">2026 Qoder 高校创造力大赛 · LifeHack</div>
+    <div class="hero-3d"><i></i>可行走的三维夜间校园 · 宿舍 / 图书馆 / 教学楼 / 食堂 / 打印店</div>
     <h1 class="hero-title">
       <span class="l1">期末周</span><span class="l2">求生</span>
     </h1>
@@ -86,20 +109,31 @@
       <input id="custom-major-input" type="text" maxlength="16" placeholder="例如：考古学">
     </div>
     <div class="field">
-      <label for="subject-input">最怕的那门课（主攻）</label>
-      <input id="subject-input" type="text" list="subject-list" maxlength="16" placeholder="例如：数据结构" autocomplete="off">
-      <datalist id="subject-list"></datalist>
-      <div class="subject-chips" id="subject-chips"></div>
+      <label for="subject-select">最怕的那门课（主攻）</label>
+      <div class="select-wrap">
+        <select id="subject-select"></select>
+        <span class="sel-arrow">▾</span>
+      </div>
+      <p class="field-note" id="subject-note"></p>
+    </div>
+    <div class="field" id="custom-subject">
+      <label for="custom-subject-input">自定义课程名称</label>
+      <input id="custom-subject-input" type="text" maxlength="16" placeholder="例如：量子场论" autocomplete="off">
     </div>
 
     <div class="field">
       <label for="side-1">同期还要考的两门</label>
       <div class="side-inputs">
-        <input id="side-1" type="text" list="side-list" maxlength="16" placeholder="例如：操作系统" autocomplete="off">
-        <input id="side-2" type="text" list="side-list" maxlength="16" placeholder="例如：编译原理" autocomplete="off">
+        <div class="select-wrap">
+          <select id="side-1"></select>
+          <span class="sel-arrow">▾</span>
+        </div>
+        <div class="select-wrap">
+          <select id="side-2"></select>
+          <span class="sel-arrow">▾</span>
+        </div>
       </div>
-      <datalist id="side-list"></datalist>
-      <p class="field-note">已按你的专业填好。这三门抢同一个三天：给了一门，另外两门就在后台遗忘、吃你的心态。</p>
+      <p class="field-note">已按你的专业填好，两门都可以换成别的课。这三门抢同一个三天：给了一门，另外两门就在后台遗忘、吃你的心态。</p>
     </div>
 
     <div class="field">
@@ -140,13 +174,14 @@
   </div>
 
   <div class="panel howto">
-    <div class="panel-head"><h2>怎么玩</h2><span class="hint">评委五步以内</span></div>
+    <div class="panel-head"><h2>怎么玩</h2><span class="hint">评委六步以内</span></div>
     <ol class="steps">
       <li><b>1</b><span>选专业，三门课已预填，可直接跳过</span></li>
-      <li><b>2</b><span>点「开始这三天」</span></li>
-      <li><b>3</b><span>每个时段先按 <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> 决定攻哪门，再从 2–3 个选项里挑一个</span></li>
-      <li><b>4</b><span>盯住右侧：没碰的课会遗忘、扣心态，体力和心态别见底</span></li>
-      <li><b>5</b><span>三门连考后生成战绩卡，保存或分享</span></li>
+      <li><b>2</b><span>点「开始这三天」，你站在宿舍里，台灯还亮着</span></li>
+      <li><b>3</b><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走到光柱标记的地点（或点「直接前往」），事件在那里触发</span></li>
+      <li><b>4</b><span>先按 <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> 决定攻哪门，再从 2–3 个选项里挑一个</span></li>
+      <li><b>5</b><span>盯住状态栏：没碰的课会遗忘、扣心态，体力和心态别见底</span></li>
+      <li><b>6</b><span>走进考场三门连考，生成战绩卡，保存或分享</span></li>
     </ol>
     <div class="rules-note">
       <p><b>掌握</b>是三门课按学分加权的平均值，决定分数上限；每天睡觉三门都会遗忘一部分。</p>
@@ -156,12 +191,13 @@
       <p><b>人脉</b>解锁借笔记、问学长这些高收益选项，考场上还能兑现成情报分。</p>
       <p>连续选学习类选项会累积<b>专注</b>，掌握额外加成，但体力恢复打折。</p>
       <p>卷面按科目出真题：选数学分析就考 ε-δ 和级数，选民法就考请求权基础，不会串味。</p>
+      <p>三维世界里的一切都在跟着数值走：书堆高度是掌握度，冷落的课便利贴会发红，心态越低雾越浓、画面越抖，天光从清晨走到深夜。</p>
       <p class="rules-heart">这局游戏想说的其实是一件事：<b>三门一起压过来的时候，取舍不是失败</b>。该睡就睡、把时间分清楚的人，通常比通宵的人考得高。</p>
     </div>
   </div>
 
   <footer class="foot">
-    <span>全程用 Qoder 开发与部署 · 纯前端 · 无外部依赖</span>
+    <span>全程用 Qoder 开发与部署 · 纯前端 · 三维引擎本地打包，离线可跑</span>
     <button class="link-btn" id="btn-copy-link">复制本站链接</button>
   </footer>
 </section>
@@ -169,6 +205,24 @@
 <!-- ============ 对局 ============ -->
 <section class="screen" id="screen-game">
   <div class="game-grid">
+    <div class="roam-hud" id="roam-hud">
+      <div class="roam-card panel">
+        <span class="rc-kicker">自由行动 · 第 <b id="roam-day">1</b> 天 <b id="roam-slot">清晨</b></span>
+        <h2 class="rc-title">走去<b id="roam-place">图书馆</b></h2>
+        <p class="rc-sub" id="roam-teaser">这个时段的事，在那里等你。</p>
+        <div class="rc-meter">
+          <span class="rc-compass"><i id="compass-needle"></i></span>
+          <span class="rc-dist" id="roam-dist">— m</span>
+          <span class="rc-goal">目标地点</span>
+        </div>
+        <button class="btn-primary" id="btn-go">
+          <span>直接前往</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m-5-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <p class="rc-hint" id="roam-hint"></p>
+      </div>
+    </div>
+
     <div class="stage panel">
       <div class="stage-head">
         <div class="time-block">
@@ -245,6 +299,9 @@
       </div>
     </aside>
   </div>
+  <div class="stick" id="stick" aria-hidden="true"><i id="stick-knob"></i></div>
+  <div class="crosshair" id="crosshair" aria-hidden="true"></div>
+  <button class="peek-btn" id="btn-courses" type="button">三科 <b id="peek-warn"></b></button>
 </section>
 
 <!-- ============ 考试 ============ -->
@@ -345,12 +402,15 @@
   </div>
 </div>
 
+<script src="js/vendor/three.min.js"></script>
+<script src="js/vendor/three-fx.js"></script>
 <script src="js/data.js"></script>
 <script src="js/subjects.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/voice-lines.js"></script>
 <script src="js/voice.js"></script>
 <script src="js/card.js"></script>
+<script src="js/world.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

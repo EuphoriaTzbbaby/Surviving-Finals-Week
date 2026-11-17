@@ -14,6 +14,9 @@ const WIDTH = parseInt(arg('--width', '1440'), 10);
 const HEIGHT = parseInt(arg('--height', '900'), 10);
 const SHOTS = arg('--shots', '');
 const PORT = parseInt(arg('--port', '9333'), 10);
+const MAJOR = arg('--major', '数学与应用数学');
+const SUBJECT = arg('--subject', '数学分析');
+const FLAT = process.argv.includes('--flat');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const problems = [];
@@ -99,6 +102,11 @@ const LAYOUT_PROBE = `(() => {
   }
   const screen = document.querySelector('.screen.active');
   screen.querySelectorAll('button, .cr, .tr-row, .cs-btn, canvas').forEach((el) => {
+    // 按模式/相位故意隐藏的元素（平面下的前往按钮、漫游下的剧情卡）不算缺陷
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.display === 'none' || s.visibility === 'hidden') return;
+    }
     const r = el.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) {
       const id = el.id ? '#' + el.id : '.' + String(el.className).split(' ')[0];
@@ -148,8 +156,24 @@ const STATE_DUMP = `(() => {
   };
 })()`;
 
+async function walkIfRoaming(cdp) {
+  // 三维模式下事件要先走到地点才渲染： roam 阶段点「直接前往」，等到达后再读剧情
+  for (let i = 0; i < 3; i++) {
+    const roaming = await cdp.eval(`document.body.dataset.wphase === 'roam' && !!document.getElementById('btn-go')`);
+    if (!roaming) return;
+    await cdp.eval(`document.getElementById('btn-go').click()`);
+    try {
+      await cdp.wait(`document.body.dataset.wphase !== 'roam'`, '走到地点', 90000);
+    } catch (e) {
+      console.log('  [漫游卡住] ' + JSON.stringify(await cdp.eval(`window.FZ && FZ.World && FZ.World.debug ? FZ.World.debug() : null`)));
+      throw e;
+    }
+  }
+}
+
 async function pickChoice(cdp) {
-  await cdp.wait(`document.querySelectorAll('#choices .choice:not(.locked)').length > 0`, '选项渲染');
+  await walkIfRoaming(cdp);
+  await cdp.wait(`document.querySelectorAll('#choices .choice:not(.locked)').length > 0`, '选项渲染', 30000);
   await cdp.eval(SMART_PICK);
   try {
     await cdp.wait(`document.getElementById('btn-next').classList.contains('on')`, '结果与继续按钮', 8000);
@@ -164,7 +188,8 @@ async function main() {
   if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
   const chrome = spawn(CHROME, [
     '--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`,
-    '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--mute-audio',
+    '--no-first-run', '--no-default-browser-check', '--mute-audio',
+    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
     '--disable-features=Translate,MediaRouter', `--window-size=${WIDTH},${HEIGHT}`, URL_BASE
   ], { stdio: 'ignore' });
 
@@ -187,6 +212,12 @@ async function main() {
     await cdp.send('Page.navigate', { url: URL_BASE });
     await cdp.wait(`!!window.FZ && !!document.getElementById('fact-exams')`, '脚本加载');
     await sleep(600);
+    if (FLAT) {
+      await cdp.eval(`(() => { const b = document.getElementById('btn-3d'); if (b && !b.classList.contains('off')) b.click(); })()`);
+      await sleep(400);
+    }
+    const worldState = await cdp.eval(`document.body.classList.contains('world-on') ? '3D' : '2D'`);
+    console.log('  渲染模式:', worldState);
 
     console.log(`\n=== ${WIDTH}×${HEIGHT} ===`);
     const facts = await cdp.eval(`['fact-events','fact-exams','fact-endings'].map(i=>document.getElementById(i).textContent)`);
@@ -194,18 +225,115 @@ async function main() {
     await probe(cdp, '标题页');
     await cdp.shot('01-title');
 
-    // 用户投诉的那门课：数学分析。副科自动带出实变函数 / 抽象代数
+    // 三个选课位都必须是下拉，且候选覆盖全部 72 门课
+    const pickers = await cdp.eval(`(() => {
+      const ids = ['subject-select', 'side-1', 'side-2'];
+      return ids.map((id) => {
+        const el = document.getElementById(id);
+        return { id, tag: el.tagName, opts: el.querySelectorAll('option').length, groups: el.querySelectorAll('optgroup').length };
+      });
+    })()`);
+    pickers.forEach((p) => {
+      console.log(`  选课下拉 ${p.id}: ${p.tag} · ${p.opts} 项 · ${p.groups} 组`);
+      if (p.tag !== 'SELECT') note(`${p.id} 不是下拉菜单`);
+      if (p.opts < 72) note(`${p.id} 候选不足 72 门课（${p.opts}）`);
+    });
+
+    // 默认测用户投诉的那门课：数学分析。副科自动带出实变函数 / 抽象代数
     await cdp.eval(`(() => {
       localStorage.clear();
       const s = document.getElementById('major-select');
-      s.value = '数学与应用数学'; s.dispatchEvent(new Event('change'));
-      const i = document.getElementById('subject-input');
-      i.value = '数学分析'; i.dataset.auto = '0'; i.dispatchEvent(new Event('input'));
+      s.value = ${JSON.stringify(MAJOR)}; s.dispatchEvent(new Event('change'));
+      const m = document.getElementById('subject-select');
+      m.value = ${JSON.stringify(SUBJECT)}; m.dispatchEvent(new Event('change'));
       document.querySelector('.diff-btn[data-d="normal"]').click();
     })()`);
-    const setup = await cdp.eval(`[document.getElementById('subject-input').value, document.getElementById('side-1').value, document.getElementById('side-2').value]`);
+    const setup = await cdp.eval(`[document.getElementById('subject-select').value, document.getElementById('side-1').value, document.getElementById('side-2').value]`);
     console.log('  三科:', setup.join(' + '));
-    if (setup[0] !== '数学分析') note('主攻科目没设置成功');
+    if (setup[0] !== SUBJECT) note('主攻科目没设置成功');
+    if (new Set(setup).size !== 3) note('三科有重复: ' + setup.join(' / '));
+
+    // 下拉互斥：主攻已选的那门在副科里必须禁用；换主攻后副科要自动避让
+    const excl = await cdp.eval(`(() => {
+      const opt = (id, v) => [...document.getElementById(id).querySelectorAll('option')].find(o => o.value === v);
+      const before = opt('side-1', '数学分析').disabled;
+      const m = document.getElementById('subject-select');
+      m.value = '实变函数'; m.dispatchEvent(new Event('change'));
+      const sides = [document.getElementById('side-1').value, document.getElementById('side-2').value];
+      m.value = '数学分析'; m.dispatchEvent(new Event('change'));
+      return { before, sides };
+    })()`);
+    if (!excl.before) note('副科下拉没有禁用主攻已选的课');
+    if (excl.sides.includes('实变函数')) note('换主攻后副科没避让: ' + excl.sides.join(' / '));
+    console.log('  换主攻到实变函数后副科自动避让 →', excl.sides.join(' / '));
+
+    // 跨专业选课：电子信息工程的学生也能主攻数学分析
+    const cross = await cdp.eval(`(() => {
+      const s = document.getElementById('major-select');
+      s.value = '电子信息工程'; s.dispatchEvent(new Event('change'));
+      const m = document.getElementById('subject-select');
+      const has = [...m.querySelectorAll('option')].some(o => o.value === '数学分析');
+      m.value = '数学分析'; m.dispatchEvent(new Event('change'));
+      const got = m.value;
+      s.value = '数学与应用数学'; s.dispatchEvent(new Event('change'));
+      m.value = '数学分析'; m.dispatchEvent(new Event('change'));
+      return { has, got };
+    })()`);
+    if (!cross.has || cross.got !== '数学分析') note('跨专业选课失败');
+    else console.log('  跨专业选课可用（电子信息工程 → 主攻数学分析）');
+
+    // 自定义专业：没有推荐课表时按专业名生成三门，仍须互不重复
+    const cm = await cdp.eval(`(() => {
+      const s = document.getElementById('major-select');
+      s.value = '__custom'; s.dispatchEvent(new Event('change'));
+      const i = document.getElementById('custom-major-input');
+      i.value = '考古学'; i.dispatchEvent(new Event('input'));
+      const vals = ['subject-select', 'side-1', 'side-2'].map(id => document.getElementById(id).value);
+      const shown = getComputedStyle(document.getElementById('custom-major')).display !== 'none';
+      const group = document.getElementById('subject-select').querySelector('optgroup').label;
+      return { vals, shown, group };
+    })()`);
+    console.log('  自定义专业三科:', cm.vals.join(' + '), '· 首组', cm.group);
+    if (!cm.shown) note('自定义专业输入框没展开');
+    if (new Set(cm.vals).size !== 3 || cm.vals.some((v) => !v)) note('自定义专业三科重复或为空');
+
+    // 自定义课程：下拉里选「自定义课程…」后读旁边的输入框
+    const cc = await cdp.eval(`(() => {
+      const m = document.getElementById('subject-select');
+      m.value = '__custom'; m.dispatchEvent(new Event('change'));
+      const i = document.getElementById('custom-subject-input');
+      i.value = '量子场论'; i.dispatchEvent(new Event('input'));
+      const note = document.getElementById('subject-note');
+      return {
+        shown: getComputedStyle(document.getElementById('custom-subject')).display !== 'none',
+        text: note.textContent, off: note.classList.contains('off'),
+        sides: [document.getElementById('side-1').value, document.getElementById('side-2').value]
+      };
+    })()`);
+    console.log('  自定义课程提示:', cc.text);
+    if (!cc.shown) note('自定义课程输入框没展开');
+    if (!cc.off || !cc.text.includes('量子场论')) note('自定义课程提示没切换成通用题库口径');
+    if (cc.sides.includes('量子场论')) note('副科与自定义主攻撞名');
+
+    // 回到本次要测的专业与课程
+    await cdp.eval(`(() => {
+      const s = document.getElementById('major-select');
+      s.value = ${JSON.stringify(MAJOR)}; s.dispatchEvent(new Event('change'));
+      const m = document.getElementById('subject-select');
+      const want = ${JSON.stringify(SUBJECT)};
+      if ([...m.querySelectorAll('option')].some(o => o.value === want)) m.value = want;
+      else {
+        m.value = '__custom';
+        document.getElementById('custom-subject-input').value = want;
+      }
+      m.dispatchEvent(new Event('change'));
+      document.getElementById('custom-subject-input').dispatchEvent(new Event('input'));
+    })()`);
+    const restored = await cdp.eval(`[document.getElementById('subject-select').value, document.getElementById('side-1').value, document.getElementById('side-2').value]`);
+    const mainNow = await cdp.eval(`document.getElementById('subject-select').value === '__custom'
+      ? document.getElementById('custom-subject-input').value : document.getElementById('subject-select').value`);
+    if (mainNow !== SUBJECT) note(`主攻没设成 ${SUBJECT}，实际 ${mainNow}`);
+    if (new Set([mainNow, restored[1], restored[2]]).size !== 3) note('三科有重复: ' + [mainNow, restored[1], restored[2]].join(' / '));
 
     await cdp.eval(`document.getElementById('btn-start').click()`);
     await cdp.wait(`document.getElementById('screen-game').classList.contains('active')`, '进入对局');
@@ -214,6 +342,9 @@ async function main() {
     const courses = await cdp.eval(`[...document.querySelectorAll('#course-list .cr-name')].map(e=>e.textContent)`);
     console.log('  侧栏三科:', courses.join(' / '));
     if (courses.length !== 3) note('侧栏没有渲染三科');
+    // 三维下开局是漫游相位：先走到地点触发事件，Q/W/E 才是换科目而不是走路
+    await walkIfRoaming(cdp);
+    await sleep(600);
     await probe(cdp, '对局页');
     await cdp.shot('02-game');
 
@@ -228,13 +359,17 @@ async function main() {
     };
     await scanText('第 1 个事件');
 
-    // Q/W/E 切换
-    await cdp.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', bubbles: true }))`);
+    // Q/W/E 切换（keydown 必须配 keyup，否则三维里走路键会一直按住）
+    const press = (k) => cdp.eval(`(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: '${k}', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: '${k}', bubbles: true }));
+    })()`);
+    await press('w');
     await sleep(200);
     let act = await cdp.eval(`[...document.querySelectorAll('#course-switch .cs-btn')].findIndex(b=>b.classList.contains('on'))`);
     console.log('  按 W 后选中第', act + 1, '门');
     if (act !== 1) note('W 键没有切到第二门');
-    await cdp.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true }))`);
+    await press('e');
     await sleep(200);
     act = await cdp.eval(`[...document.querySelectorAll('#course-switch .cs-btn')].findIndex(b=>b.classList.contains('on'))`);
     if (act !== 2) note('E 键没有切到第三门');
@@ -262,6 +397,7 @@ async function main() {
         bs.forEach(b => { const v = parseFloat(b.querySelector('.cs-k').textContent); if (v < bv) { bv = v; best = b; } });
         best.click();
       })()`);
+      await walkIfRoaming(cdp);
       const kicker = await cdp.eval(`document.getElementById('event-kicker').textContent`);
       const title = await cdp.eval(`document.getElementById('event-title').textContent`);
       // 回归：打字动画期间切课不能提前渲染选项，否则动画结束会把按钮换掉、吃掉玩家第一次点击

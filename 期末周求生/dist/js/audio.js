@@ -219,6 +219,14 @@ FZ.Audio = (function () {
   }
 
   const SFX = {
+    /* 脚步：室内木地板闷响，室外湿地脆响 */
+    step(o) {
+      const ind = o && o.indoor, run = o && o.run;
+      const v = (run ? 0.055 : 0.032) * vel();
+      noise({ dur: ind ? 0.055 : 0.04, f: (ind ? 620 : 2100) * hum(), f2: ind ? 220 : 700,
+        q: ind ? 1.1 : 0.7, vol: v, pan: rnd(-0.3, 0.3), send: ind ? 0.22 : 0.34 });
+      sub({ f0: (ind ? 120 : 165) * hum(), f1: ind ? 58 : 80, dur: 0.05, vol: v * 0.7 });
+    },
     tap() {
       const p = hum(), v = vel();
       noise({ dur: 0.035, f: 2300 * p, f2: 900, q: 1.3, vol: 0.09 * v, send: 0.1 });
