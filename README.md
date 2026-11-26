@@ -47,5 +47,7 @@ node tools/build.js          # 重建 dist
 
 ## 说明
 
-- 在线站点：<https://finals-week-survival-k3z3jvrfki4.qoder.zone>（Qoder Sites）。
+- **最新版在线试玩**：<https://cdwswb.github.io/finals-week-survival/>（GitHub Pages，随 `dist` 更新）
+- 源码仓库：<https://github.com/EuphoriaTzbbaby/Surviving-Finals-Week>
+- Qoder Sites 原站点：<https://finals-week-survival-k3z3jvrfki4.qoder.zone>（平台故障期间可能落后）
 - 仓库中的最新版以 `期末周求生/dist/index.html` 为准。
