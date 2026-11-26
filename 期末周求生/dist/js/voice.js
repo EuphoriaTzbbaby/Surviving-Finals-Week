@@ -7,7 +7,7 @@ FZ.Voice = (function () {
   const LINES = FZ.VOICE_LINES || {};
   const BASE = 'assets/voice/';
   let enabled = true, clipMode = true, unlocked = false;
-  let lastKey = '', lastAt = 0, cur = null;
+  let lastKey = '', lastAt = 0, cur = null, playbackId = 0;
   const pool = {}, lastIdx = {};
 
   /* 片段已按情绪烘焙语速与音调，这里只留音量与 TTS 兜底参数 */
@@ -97,12 +97,17 @@ FZ.Voice = (function () {
     a.playbackRate = 0.99 + Math.random() * 0.03;
     try { a.currentTime = 0; } catch (e) { /* 尚未加载元数据 */ }
     cur = a;
+    const id = playbackId;
     const p = a.play();
     duckFor(a.duration && isFinite(a.duration) ? a.duration : bank.say[i].length * 0.22);
-    if (p && p.catch) p.catch(() => { clipMode = false; cur = null; speakTTS(key, bank, i); });
+    if (p && p.catch) p.catch((err) => {
+      if (!enabled || id !== playbackId || cur !== a || (err && err.name === 'AbortError')) return;
+      clipMode = false; cur = null; speakTTS(key, bank, i);
+    });
   }
 
   function stop() {
+    playbackId++;
     if (cur) { try { cur.pause(); cur.currentTime = 0; } catch (e) { /* 忽略 */ } cur = null; }
     if (synth) synth.cancel();
   }

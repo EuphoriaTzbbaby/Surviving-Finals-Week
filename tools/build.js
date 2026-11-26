@@ -34,7 +34,7 @@ copy('index.html');
 for (const d of ['css', 'js', 'assets']) if (fs.existsSync(path.join(src, d))) copy(d);
 
 // 产物必须自带三维引擎，否则线上会静默退回平面
-const need = ['index.html', 'js/world.js', 'js/vendor/three.min.js', 'js/vendor/three-fx.js', 'js/subjects.js'];
+const need = ['index.html', 'js/world.js', 'js/vendor/three.min.js', 'js/vendor/three-fx.js', 'js/subjects.js', 'js/npcs.js'];
 const missing = need.filter((f) => !fs.existsSync(path.join(out, f)));
 if (missing.length) throw new Error('产物缺文件: ' + missing.join(', '));
 

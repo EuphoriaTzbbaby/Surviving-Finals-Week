@@ -5,7 +5,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = require('./browser')();
 const URL_BASE = process.env.FZ_URL || 'http://127.0.0.1:8765/index.html';
 const SCREEN = process.argv[2] || 'screen-result';
 const W = parseInt(process.argv[3] || '1440', 10);
@@ -59,8 +59,9 @@ async function main() {
     })()`);
     console.log(JSON.stringify(out, null, 2));
     const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
-    fs.writeFileSync(`/tmp/fz-layout-${SCREEN}-${W}.png`, Buffer.from(shot.result.data, 'base64'));
-    console.log('截图 /tmp/fz-layout-' + SCREEN + '-' + W + '.png');
+    const screenshot = path.join(os.tmpdir(), `fz-layout-${SCREEN}-${W}.png`);
+    fs.writeFileSync(screenshot, Buffer.from(shot.result.data, 'base64'));
+    console.log('截图 ' + screenshot);
     ws.close();
   } finally { chrome.kill(); await sleep(300); fs.rmSync(profile, { recursive: true, force: true }); }
 }

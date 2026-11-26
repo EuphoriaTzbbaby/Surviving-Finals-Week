@@ -2,7 +2,24 @@ window.FZ = window.FZ || {};
 
 FZ.Audio = (function () {
   let ctx = null, master = null, duckG = null, verbIn = null, white = null;
-  let ambGain = null, enabled = true, ready = false;
+  let ambGain = null, enabled = true, ready = false, unlocked = false, resuming = false;
+  let environmentGain = null, ambience = null, environmentTimer = null, environmentEvent = null;
+  let environment = { scene: 'campus', slot: 0, active: false }, eventIndex = 0;
+
+  const environments = {
+    campus: { cutoff: 580, room: 0.12, pad: 0.022, interval: [6, 11], day: ['bird', 'wind'], night: ['insects', 'wind'] },
+    dorm: { cutoff: 300, room: 0.045, pad: 0.025, interval: [12, 20], day: ['fan'], night: ['fan'] },
+    online: { cutoff: 240, room: 0.035, pad: 0.018, interval: [14, 22], day: ['fan'], night: ['fan'] },
+    library: { cutoff: 320, room: 0.035, pad: 0.02, interval: [14, 24], day: ['paper'], night: ['paper'] },
+    classroom: { cutoff: 380, room: 0.045, pad: 0.024, interval: [12, 20], day: ['paper'], night: ['paper'] },
+    canteen: { cutoff: 720, room: 0.075, pad: 0.018, interval: [7, 13], day: ['dishes'], night: ['dishes'] },
+    print: { cutoff: 460, room: 0.06, pad: 0.016, interval: [8, 14], day: ['printer'], night: ['printer'] },
+    court: { cutoff: 620, room: 0.09, pad: 0.018, interval: [5, 9], day: ['bounce', 'bird', 'wind'], night: ['bounce', 'insects'] },
+    garden: { cutoff: 480, room: 0.1, pad: 0.022, interval: [6, 12], day: ['bird', 'wind'], night: ['insects', 'wind'] },
+    cafe: { cutoff: 400, room: 0.055, pad: 0.028, interval: [8, 14], day: ['cup', 'coffee'], night: ['cup', 'coffee'] }
+  };
+
+  const hidden = () => typeof document !== 'undefined' && !!document.hidden;
 
   const rnd = (a, b) => a + Math.random() * (b - a);
   const hum = () => rnd(0.985, 1.015);
@@ -52,8 +69,12 @@ FZ.Audio = (function () {
     duckG.connect(comp);
 
     master = ctx.createGain();
-    master.gain.value = enabled ? 0.85 : 0;
+    master.gain.value = enabled && !hidden() ? 0.85 : 0;
     master.connect(duckG);
+
+    environmentGain = ctx.createGain();
+    environmentGain.gain.value = 0;
+    environmentGain.connect(master);
 
     const conv = ctx.createConvolver();
     conv.buffer = makeImpulse(1.7, 2.6);
@@ -65,16 +86,33 @@ FZ.Audio = (function () {
     white = makeWhite(2);
     startAmbience();
     ready = true;
+    ctx.addEventListener('statechange', () => syncEnvironment());
   }
 
   function route(node, o) {
     const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     if (p) { p.pan.value = o.pan == null ? rnd(-0.12, 0.12) : o.pan; node.connect(p); }
     const out = p || node;
+    // 环境事件不送入共享混响，切换时整个事件都可淡出。
+    if (o.bus) { out.connect(o.bus.gain); return; }
     out.connect(master);
     const s = ctx.createGain();
     s.gain.value = o.send == null ? 0.12 : o.send;
     out.connect(s); s.connect(verbIn);
+  }
+
+  function trackSource(source, o, end) {
+    if (!o.bus) return;
+    const bus = o.bus;
+    bus.sources.set(source, end);
+    source.onended = () => {
+      source.disconnect();
+      bus.sources.delete(source);
+      if (!bus.sources.size) {
+        bus.gain.disconnect();
+        if (environmentEvent === bus) environmentEvent = null;
+      }
+    };
   }
 
   function env(param, t0, dur, vol, attack) {
@@ -86,7 +124,7 @@ FZ.Audio = (function () {
 
   /* 双振荡去谐层：厚度来自两个略微失谐的分音 */
   function osc(o) {
-    if (!ctx || !enabled) return;
+    if (!ctx || !enabled || hidden()) return;
     const t0 = ctx.currentTime + (o.delay || 0);
     const g = ctx.createGain();
     env(g.gain, t0, o.dur, o.vol, o.attack);
@@ -110,11 +148,13 @@ FZ.Audio = (function () {
         const lfo = ctx.createOscillator(), lg = ctx.createGain();
         lfo.frequency.value = o.vibrato; lg.gain.value = o.f * 0.006;
         lfo.connect(lg); lg.connect(v.frequency);
+        trackSource(lfo, o, t0 + o.dur + 0.05);
         lfo.start(t0); lfo.stop(t0 + o.dur + 0.05);
       }
       const half = ctx.createGain();
       half.gain.value = 0.5;
       v.connect(half); half.connect(dest);
+      trackSource(v, o, t0 + o.dur + 0.06);
       v.start(t0); v.stop(t0 + o.dur + 0.06);
     });
     route(g, o);
@@ -122,7 +162,7 @@ FZ.Audio = (function () {
 
   /* FM 铃 / 马林巴：index 越大越玻璃质，越小越木质 */
   function bell(o) {
-    if (!ctx || !enabled) return;
+    if (!ctx || !enabled || hidden()) return;
     const t0 = ctx.currentTime + (o.delay || 0);
     const car = ctx.createOscillator(), mod = ctx.createOscillator();
     const mg = ctx.createGain(), g = ctx.createGain();
@@ -135,6 +175,8 @@ FZ.Audio = (function () {
     env(g.gain, t0, o.dur, o.vol, o.attack);
     car.connect(g);
     route(g, o);
+    trackSource(car, o, t0 + o.dur + 0.06);
+    trackSource(mod, o, t0 + o.dur + 0.06);
     car.start(t0); mod.start(t0);
     car.stop(t0 + o.dur + 0.06); mod.stop(t0 + o.dur + 0.06);
   }
@@ -142,11 +184,11 @@ FZ.Audio = (function () {
   function pluck(o) {
     osc({ f: o.f, f2: o.f2, dur: o.dur, vol: o.vol, delay: o.delay, type: 'sawtooth',
       cutoff: o.cutoff || 2400, cutoff2: (o.cutoff || 2400) * 0.18, q: 3,
-      spread: 9, attack: 0.004, pan: o.pan, send: o.send == null ? 0.16 : o.send });
+      spread: 9, attack: 0.004, pan: o.pan, send: o.send == null ? 0.16 : o.send, bus: o.bus });
   }
 
   function noise(o) {
-    if (!ctx || !enabled) return;
+    if (!ctx || !enabled || hidden()) return;
     const t0 = ctx.currentTime + (o.delay || 0);
     const src = ctx.createBufferSource();
     src.buffer = white; src.loop = true;
@@ -160,18 +202,20 @@ FZ.Audio = (function () {
     env(g.gain, t0, o.dur, o.vol, o.attack);
     src.connect(f); f.connect(g);
     route(g, o);
+    trackSource(src, o, t0 + o.dur + 0.06);
     src.start(t0, rnd(0, 1.4)); src.stop(t0 + o.dur + 0.06);
   }
 
   function sub(o) {
-    if (!ctx || !enabled) return;
+    if (!ctx || !enabled || hidden()) return;
     const t0 = ctx.currentTime + (o.delay || 0);
     const v = ctx.createOscillator(), g = ctx.createGain();
     v.type = 'sine';
     v.frequency.setValueAtTime(o.f0, t0);
     v.frequency.exponentialRampToValueAtTime(o.f1, t0 + o.dur * 0.85);
     env(g.gain, t0, o.dur, o.vol, o.attack == null ? 0.008 : o.attack);
-    v.connect(g); route(g, { send: o.send == null ? 0.06 : o.send, pan: 0 });
+    v.connect(g); route(g, { send: o.send == null ? 0.06 : o.send, pan: 0, bus: o.bus });
+    trackSource(v, o, t0 + o.dur + 0.06);
     v.start(t0); v.stop(t0 + o.dur + 0.06);
   }
 
@@ -180,7 +224,7 @@ FZ.Audio = (function () {
   function startAmbience() {
     ambGain = ctx.createGain();
     ambGain.gain.value = 0;
-    ambGain.connect(master);
+    ambGain.connect(environmentGain);
 
     const src = ctx.createBufferSource();
     src.buffer = white; src.loop = true;
@@ -215,17 +259,186 @@ FZ.Audio = (function () {
       v.start(); lfo.start();
     });
 
-    ambGain.gain.setTargetAtTime(0.2, ctx.currentTime, 2.5);
+    ambience = { filter: lp, room: roomG, pad: padG };
+  }
+
+  function environmentActive() {
+    return !!(ready && enabled && !hidden() && environment.active && ctx.state === 'running');
+  }
+
+  function fade(param, value, seconds) {
+    const t = ctx.currentTime;
+    if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(t);
+    else {
+      const current = param.value;
+      param.cancelScheduledValues(t);
+      param.setValueAtTime(current, t);
+    }
+    param.linearRampToValueAtTime(value, t + seconds);
+  }
+
+  function stopEnvironmentEvent() {
+    if (!environmentEvent) return;
+    const bus = environmentEvent;
+    environmentEvent = null;
+    fade(bus.gain.gain, 0, 0.24);
+    bus.sources.forEach((end, source) => source.stop(Math.min(end, ctx.currentTime + 0.24)));
+  }
+
+  function clearEnvironmentTimer() {
+    if (environmentTimer !== null) clearTimeout(environmentTimer);
+    environmentTimer = null;
+  }
+
+  function scheduleEnvironment() {
+    if (!environmentActive() || environmentTimer !== null) return;
+    const interval = environments[environment.scene].interval;
+    const timer = setTimeout(() => {
+      if (environmentTimer !== timer) return;
+      environmentTimer = null;
+      if (!environmentActive()) return;
+      playEnvironmentEvent();
+      scheduleEnvironment();
+    }, Math.max(4000, rnd(interval[0], interval[1]) * 1000));
+    environmentTimer = timer;
+  }
+
+  function syncEnvironment(changed) {
+    if (!ready) return;
+    if (changed || !environmentActive()) {
+      clearEnvironmentTimer();
+      stopEnvironmentEvent();
+    }
+    const profile = environments[environment.scene], night = environment.slot === 2;
+    fade(environmentGain.gain, environmentActive() ? 1 : 0, 0.6);
+    fade(ambGain.gain, night ? 0.1 : 0.16, 1.2);
+    fade(ambience.filter.frequency, profile.cutoff * (night ? 0.8 : 1), 1.2);
+    fade(ambience.room.gain, profile.room, 1.2);
+    fade(ambience.pad.gain, profile.pad, 1.2);
+    scheduleEnvironment();
+  }
+
+  function setEnvironment(next) {
+    if (!next || typeof next !== 'object') return;
+    const scene = Object.prototype.hasOwnProperty.call(environments, next.scene) ? next.scene : environment.scene;
+    const slot = next.slot === 0 || next.slot === 1 || next.slot === 2 ? next.slot : environment.slot;
+    const active = typeof next.active === 'boolean' ? next.active : environment.active;
+    if (scene === environment.scene && slot === environment.slot && active === environment.active) return;
+    const changed = scene !== environment.scene || (slot === 2) !== (environment.slot === 2) || active !== environment.active;
+    environment = { scene, slot, active };
+    if (changed) { eventIndex = 0; syncEnvironment(true); }
+  }
+
+  function playEnvironmentEvent() {
+    stopEnvironmentEvent();
+    const bus = { gain: ctx.createGain(), sources: new Map() };
+    bus.gain.gain.value = 0;
+    bus.gain.connect(environmentGain);
+    fade(bus.gain.gain, 1, 0.04);
+    environmentEvent = bus;
+    const night = environment.slot === 2, profile = environments[environment.scene];
+    const kinds = night ? profile.night : profile.day;
+    const kind = kinds[eventIndex++ % kinds.length];
+    const v = (night ? 0.55 : 1) * vel(), pan = rnd(-0.45, 0.45);
+    const sound = (fn, o) => fn(Object.assign({}, o, { vol: o.vol * v, pan, bus }));
+    switch (kind) {
+      case 'bird':
+        sound(osc, { f: rnd(2200, 2800), f2: 3600, dur: 0.17, vol: 0.016, type: 'sine', spread: 2 });
+        sound(osc, { f: 3100, f2: 2400, dur: 0.19, vol: 0.012, type: 'sine', spread: 2, delay: 0.2 });
+        break;
+      case 'insects':
+        [0, 0.18, 0.36].forEach((delay) => sound(noise, { f: 4600, q: 12, dur: 0.1, vol: 0.013, attack: 0.025, delay }));
+        break;
+      case 'wind':
+        sound(noise, { f: 520, f2: 280, q: 0.5, dur: 2.4, vol: 0.026, attack: 0.8, type: 'lowpass' });
+        break;
+      case 'bounce':
+        sound(sub, { f0: 145, f1: 48, dur: 0.22, vol: 0.047 });
+        sound(noise, { f: 1250, f2: 420, q: 0.8, dur: 0.08, vol: 0.022 });
+        break;
+      case 'paper':
+        sound(noise, { f: 1900, f2: 850, q: 0.5, dur: 0.28, vol: 0.018, attack: 0.06 });
+        break;
+      case 'cup':
+      case 'dishes':
+        sound(bell, { f: kind === 'cup' ? 1450 : 1850, ratio: 2.7, index: 1.8, dur: 0.24, vol: 0.015 });
+        sound(noise, { f: 3200, q: 1.2, dur: 0.04, vol: 0.01, delay: 0.025 });
+        break;
+      case 'coffee':
+      case 'printer':
+      case 'fan':
+        sound(noise, { f: kind === 'printer' ? 680 : 260, f2: 180, type: 'lowpass', q: 0.6,
+          dur: 2.2, vol: kind === 'fan' ? 0.009 : 0.021, attack: 0.5 });
+        sound(osc, { f: kind === 'printer' ? 146 : 110, f2: 100, type: 'triangle', cutoff: 420,
+          dur: 2, vol: kind === 'fan' ? 0.005 : 0.011, attack: 0.4, spread: 3 });
+        break;
+    }
+  }
+
+  function updateMaster() {
+    if (!master) return;
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    if (!enabled || hidden()) master.gain.setValueAtTime(0, t);
+    else master.gain.setTargetAtTime(0.85, t, 0.08);
+  }
+
+  function wake() {
+    if (unlocked && enabled && !hidden()) {
+      init();
+      if (ctx && ctx.state === 'suspended' && !resuming) {
+        resuming = true;
+        try {
+          Promise.resolve(ctx.resume()).then(() => {
+            resuming = false;
+            syncEnvironment();
+          }, () => { resuming = false; syncEnvironment(); });
+        } catch (_) { resuming = false; }
+      }
+    }
+    updateMaster();
+    syncEnvironment();
+  }
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', () => {
+      updateMaster();
+      syncEnvironment(true);
+      if (!hidden()) wake();
+    });
   }
 
   const SFX = {
     /* 脚步：室内木地板闷响，室外湿地脆响 */
     step(o) {
-      const ind = o && o.indoor, run = o && o.run;
+      const ind = o && o.indoor, run = o && o.run, surface = o && o.surface;
       const v = (run ? 0.055 : 0.032) * vel();
+      const floor = surface === 'court' ? [0.045, 1350, 430, 140, 65, 0.75]
+        : surface === 'garden' ? [0.095, 2900, 950, 100, 45, 0.45]
+        : surface === 'cafe' ? [0.05, 850, 280, 115, 55, 0.65] : null;
+      if (floor) {
+        noise({ dur: floor[0], f: floor[1] * hum(), f2: floor[2], q: 0.7,
+          vol: v * floor[5], pan: rnd(-0.3, 0.3), send: surface === 'cafe' ? 0.18 : 0.1 });
+        sub({ f0: floor[3] * hum(), f1: floor[4], dur: 0.06, vol: v * floor[5] });
+        return;
+      }
       noise({ dur: ind ? 0.055 : 0.04, f: (ind ? 620 : 2100) * hum(), f2: ind ? 220 : 700,
         q: ind ? 1.1 : 0.7, vol: v, pan: rnd(-0.3, 0.3), send: ind ? 0.22 : 0.34 });
       sub({ f0: (ind ? 120 : 165) * hum(), f1: ind ? 58 : 80, dur: 0.05, vol: v * 0.7 });
+    },
+    arrival() {
+      const p = hum();
+      arp([72, 79], 0.12, (n, delay) => bell({ f: N(n) * p, ratio: 1.5, index: 0.7,
+        dur: 0.36, vol: 0.035, delay, send: 0.24 }));
+    },
+    chatOpen() {
+      const p = hum();
+      osc({ f: 440 * p, f2: 660 * p, dur: 0.12, type: 'sine', vol: 0.033, spread: 2, send: 0.14 });
+      bell({ f: N(79) * p, ratio: 1.5, index: 0.5, dur: 0.2, vol: 0.024, delay: 0.08, send: 0.18 });
+    },
+    chatReply() {
+      bell({ f: N(76) * hum(), ratio: 1.5, index: 0.6, dur: 0.16, vol: 0.03, send: 0.15 });
+      noise({ f: 1700, f2: 800, q: 0.6, dur: 0.035, vol: 0.009, send: 0.08 });
     },
     tap() {
       const p = hum(), v = vel();
@@ -376,17 +589,16 @@ FZ.Audio = (function () {
 
   return {
     unlock() {
-      init();
-      if (ctx && ctx.state === 'suspended') ctx.resume();
+      unlocked = true;
+      wake();
     },
     play(name, opt) {
-      if (!enabled) return;
-      if (!ready) init();
-      if (!ctx) return;
-      if (ctx.state === 'suspended') ctx.resume();
-      const fn = SFX[name];
-      if (fn) fn(opt);
+      if (!unlocked || !enabled || hidden()) return;
+      if (!ready || (ctx && ctx.state === 'suspended')) wake();
+      if (!ctx || ctx.state === 'closed') return;
+      if (Object.prototype.hasOwnProperty.call(SFX, name)) SFX[name](opt);
     },
+    setEnvironment,
     /* 语音播报时压低背景，说完自动恢复 */
     duck(amount, seconds) {
       if (!ctx || !duckG) return;
@@ -396,11 +608,15 @@ FZ.Audio = (function () {
       duckG.gain.setTargetAtTime(1, t + Math.max(seconds || 3, 0.4), 0.25);
     },
     setEnabled(on) {
-      enabled = on;
-      if (on) this.unlock();
-      if (master && ctx) master.gain.setTargetAtTime(on ? 0.85 : 0, ctx.currentTime, 0.08);
+      enabled = !!on;
+      wake();
     },
     isEnabled() { return enabled; },
-    supported() { return !!(window.AudioContext || window.webkitAudioContext); }
+    supported() { return !!(window.AudioContext || window.webkitAudioContext); },
+    debug() {
+      return Object.freeze({ environment: Object.freeze(Object.assign({}, environment)),
+        active: environmentActive(), ctxState: ctx ? ctx.state : 'uninitialized',
+        timerScheduled: environmentTimer !== null, enabled, hidden: hidden(), unlocked });
+    }
   };
 })();

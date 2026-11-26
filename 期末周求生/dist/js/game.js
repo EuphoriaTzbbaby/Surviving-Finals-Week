@@ -6,6 +6,7 @@ window.FZ = window.FZ || {};
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   const RUN_KEY = 'fz.run.v1';
   const META_KEY = 'fz.meta.v1';
@@ -102,6 +103,12 @@ window.FZ = window.FZ || {};
   function show(id) {
     $$('.screen').forEach((el) => el.classList.toggle('active', el.id === id));
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+    if (!worldOn()) syncFlatEnvironment();
+  }
+
+  function syncFlatEnvironment() {
+    FZ.Audio.setEnvironment({ scene: S && S.currentEvent ? S.currentEvent.scene : 'campus', slot: S ? Math.min(S.slot, 2) : 0,
+      active: !!S && S.phase === 'event' && $('#screen-game').classList.contains('active') });
   }
 
   /* ---------- 打字机 ---------- */
@@ -189,6 +196,7 @@ window.FZ = window.FZ || {};
 
   /* ---------- 状态渲染 ---------- */
   function renderStats(deltas) {
+    syncCampus();
     FZ.STATS.forEach((st) => {
       const g = document.querySelector(`.gauge[data-k="${st.key}"]`);
       if (!g) return;
@@ -219,7 +227,7 @@ window.FZ = window.FZ || {};
     const cold = S.courses.filter((c) => c.neglect >= FZ.COURSE.neglectFrom);
     if (cold.length) notes.push({ t: `${cold.map((c) => c.name).join('、')} 已冷落，每时段扣心态`, c: '#FF4D4D' });
     $('#status-note').innerHTML = notes.map((n) =>
-      `<span style="--nc:${n.c}">${n.t}</span>`).join('');
+      `<span style="--nc:${n.c}">${esc(n.t)}</span>`).join('');
     if (worldOn()) FZ.World.setStats(S.stats);
   }
 
@@ -232,7 +240,7 @@ window.FZ = window.FZ || {};
       return `<button type="button" class="cs-btn${on ? ' on' : ''}${c.neglect >= C.neglectFrom ? ' cold' : ''}"
         data-ci="${i}" style="--cc:${COURSE_COLORS[i]}" aria-pressed="${on}">
         <span class="cs-key">${'QWE'[i]}</span>
-        <span class="cs-name">${c.name}</span>
+        <span class="cs-name">${esc(c.name)}</span>
         <span class="cs-k">${Math.round(c.k)}%</span>
       </button>`;
     }).join('');
@@ -243,7 +251,7 @@ window.FZ = window.FZ || {};
       return `<div class="cr${i === S.active ? ' on' : ''}${cold ? ' cold' : ''}" style="--cc:${COURSE_COLORS[i]}">
         <div class="cr-top">
           <span class="cr-role">${i === 0 ? '主攻' : '同期'}</span>
-          <span class="cr-name">${c.name}</span>
+          <span class="cr-name">${esc(c.name)}</span>
           <span class="cr-credit">${c.credit} 学分</span>
         </div>
         <div class="cr-track"><div class="cr-fill" style="width:${Math.round(c.k)}%"></div></div>
@@ -285,7 +293,7 @@ window.FZ = window.FZ || {};
         if (idx < cur || rec) cls += ' done';
         if (idx === cur && !S.resultShown) cls += ' now';
         const tag = rec ? rec.tag : '';
-        cells.push(`<div class="${cls}" title="第${d}天 ${FZ.SLOTS[s].full}${rec && rec.to >= 0 ? ' · ' + S.courses[rec.to].name : ''}">
+        cells.push(`<div class="${cls}" title="第${d}天 ${FZ.SLOTS[s].full}${rec && rec.to >= 0 ? ' · ' + esc(S.courses[rec.to].name) : ''}">
           <span class="tl-d">${d}</span><span class="tl-s">${FZ.SLOTS[s].name}</span>
           ${tag ? `<span class="tl-tag t-${tag}">${tag}</span>` : ''}
           ${rec && rec.to >= 0 ? `<i class="tl-dot" style="--cc:${COURSE_COLORS[rec.to]}"></i>` : ''}
@@ -317,7 +325,7 @@ window.FZ = window.FZ || {};
     });
     if (fx.k > 0 && S && S.courses) {
       const ti = ch && ch.to != null ? ch.to : S.active;
-      out.push(`<span class="chip to-course" style="--cc:${COURSE_COLORS[ti]}">进《${S.courses[ti].name}》</span>`);
+      out.push(`<span class="chip to-course" style="--cc:${COURSE_COLORS[ti]}">进《${esc(S.courses[ti].name)}》</span>`);
     }
     if (ch && ch.relief) out.push('<span class="chip to-course" style="--cc:#B6F03C">重排计划·降压</span>');
     return out.join('');
@@ -377,7 +385,7 @@ window.FZ = window.FZ || {};
       b.innerHTML = `
         <span class="c-tag t-${ch.tag}">${ch.tag}</span>
         <span class="c-body">
-          <span class="c-label">${fill(ch.label)}</span>
+          <span class="c-label">${esc(fill(ch.label))}</span>
           <span class="c-fx">${lock ? `<span class="lock-reason">${lock}</span>` : hintFor(ch.fx, ch)}</span>
         </span>
         <span class="c-arrow">→</span>`;
@@ -546,16 +554,16 @@ window.FZ = window.FZ || {};
   }
 
   function advance() {
+    if (!S || S.phase !== 'event' || !S.resultShown) return;
     if (skipType()) { $('#btn-next').classList.add('on'); return; }
     FZ.Audio.play('page');
     S.slot += 1;
     S.tick += 1;
     if (S.slot > 2) {
       S.slot = 0;
-      const finishedDay = S.day;
       S.day += 1;
-      if (S.day > 3) { saveRun(); startExam(); return; }
-      overnight(finishedDay);
+      if (S.day > 3) { startExam(); return; }
+      overnight();
       return;
     }
     const drain = neglectDrain();
@@ -569,7 +577,7 @@ window.FZ = window.FZ || {};
   }
 
   /* ---------- 过夜结算 ---------- */
-  function overnight(day) {
+  function overnight() {
     const D = FZ.DIFFICULTY[S.diff];
     const B = FZ.BALANCE;
     const C = FZ.COURSE;
@@ -593,13 +601,24 @@ window.FZ = window.FZ || {};
       { l: '体力恢复', v: Math.round(S.stats.s - before.s), c: '#FFB020', note: tired < 1 ? '连续高强度复习，恢复打折' : '睡眠是最便宜的补剂' },
       { l: '心态回稳', v: Math.round(S.stats.m - before.m), c: '#FF3D8B', note: drain > 0 ? `天亮了，但没碰的课扣掉了 ${drain.toFixed(1)} 点` : '天亮了，事情好像没那么糟' }
     ];
+    S.dayendLines = lines;
+    S.phase = 'dayend';
+    S.resultShown = false;
+    saveRun();
+    renderDayend();
+  }
+
+  function renderDayend() {
+    const day = S.day - 1;
+    const lines = S.dayendLines || [];
+    $('#btn-next').classList.remove('on');
     $('#dayend-title').textContent = `第 ${day} 天结束`;
     $('#dayend-sub').textContent = day === 1 ? '还有两天。三门都还在，你比自己想的撑得住。' : '明天就考了。今晚的选择权重最高。';
     $('#dayend-lines').innerHTML = lines.map((x, i) => `
       <div class="de-line" style="--i:${i}">
         <span class="de-l" style="--c:${x.c}">${x.l}</span>
         <span class="de-v" style="--c:${x.c}">${x.v >= 0 ? '+' : ''}${x.v}</span>
-        <span class="de-n">${x.note}</span>
+        <span class="de-n">${esc(x.note)}</span>
       </div>`).join('');
     $('#dayend-stats').innerHTML = FZ.STATS.map((st) => `
       <div class="de-stat"><span style="color:${st.color}">${st.name}</span>
@@ -608,8 +627,6 @@ window.FZ = window.FZ || {};
     if (worldOn()) FZ.World.setPhase('dayend');
     FZ.Audio.play('dayend');
     setTimeout(() => FZ.Voice.say('night'), 700);
-    S.phase = 'dayend';
-    saveRun();
   }
 
   /* ---------- 考试：三场联考，题目取自各自的科目档案 ---------- */
@@ -643,6 +660,8 @@ window.FZ = window.FZ || {};
   }
 
   function renderExam() {
+    busy = false;
+    if (S.examStep >= S.examPlan.length) { finish(); return; }
     const step = S.examPlan[S.examStep];
     const q = step.q;
     const prev = S.examStep > 0 ? S.examPlan[S.examStep - 1] : null;
@@ -669,7 +688,7 @@ window.FZ = window.FZ || {};
         b.className = 'choice exam-choice';
         b.style.setProperty('--i', i);
         b.innerHTML = `<span class="c-tag t-考">${i + 1}</span>
-          <span class="c-body"><span class="c-label">${fill(ch.label, step.ci)}</span></span>
+          <span class="c-body"><span class="c-label">${esc(fill(ch.label, step.ci))}</span></span>
           <span class="c-arrow">→</span>`;
         b.addEventListener('mouseenter', () => FZ.Audio.play('hover'));
         b.addEventListener('click', (e) => examChoose(i, e));
@@ -700,13 +719,13 @@ window.FZ = window.FZ || {};
     setTimeout(() => FZ.Voice.say(ch.fx.mod >= 6 ? 'examGood' : 'examBad'), 260);
     const rb = $('#exam-result');
     rb.classList.add('on');
-    typeInto($('#exam-result-text'), fill(ch.result, step.ci), 11, () => { busy = false; });
-    setTimeout(() => { busy = false; }, 800);
+    typeInto($('#exam-result-text'), fill(ch.result, step.ci), 11);
+    S.examStep += 1;
     saveRun();
+    const run = S;
     setTimeout(() => {
-      S.examStep += 1;
-      if (S.examStep >= S.examPlan.length) finish();
-      else renderExam();
+      if (S !== run || S.phase !== 'exam') return;
+      renderExam();
     }, 2100);
   }
 
@@ -771,7 +790,7 @@ window.FZ = window.FZ || {};
     $('#transcript').innerHTML = rows.map((r, i) => `
       <div class="tr-row${r.passed ? '' : ' fail'}" style="--cc:${COURSE_COLORS[i]}">
         <span class="tr-role">${i === 0 ? '主攻' : '同期'}</span>
-        <span class="tr-name">${r.name}<i>${r.credit} 学分 · 投入 ${r.slots} 个时段 · 掌握 ${r.mastery}%</i></span>
+        <span class="tr-name">${esc(r.name)}<i>${r.credit} 学分 · 投入 ${r.slots} 个时段 · 掌握 ${r.mastery}%</i></span>
         <span class="tr-score">${r.score}</span>
         <span class="tr-grade">${r.grade.letter}</span>
       </div>`).join('');
@@ -864,13 +883,14 @@ window.FZ = window.FZ || {};
 
   /* ---------- 开局 ---------- */
   function newRun(major, subject, diff, sides) {
+    busy = false;
     S = {
       major, subject, diff,
       day: 1, slot: 0, tick: 0, active: 0,
       stats: Object.assign({}, FZ.BALANCE.start),
       courses: [],
       focus: 0, focusMax: 0, decisions: 0, day3Gain: 0,
-      used: [], history: [], tipUsed: false, majorSeen: 0, pressureSeen: 0,
+      used: [], history: [], npcMet: [], tipUsed: false, majorSeen: 0, pressureSeen: 0,
       resultShown: false, finished: false, phase: 'event'
     };
     S.courses = makeCourses([subject].concat(sides));
@@ -884,13 +904,14 @@ window.FZ = window.FZ || {};
   }
 
   function resumeRun(r) {
+    busy = false;
     S = r;
     if (worldOn()) FZ.World.place(-21.4, -0.4, 0.764);
     S.used = S.used || [];
     S.history = S.history || [];
     S.active = S.active || 0;
     $('#diff-pill').textContent = FZ.DIFFICULTY[S.diff].name;
-    if (S.phase === 'dayend') { show('screen-game'); renderStats(); renderTimeline(); renderCourses(); overnight(S.day - 1); return; }
+    if (S.phase === 'dayend') { show('screen-game'); renderStats(); renderTimeline(); renderCourses(); renderDayend(); return; }
     if (S.phase === 'exam') {
       if (!S.examPlan || !S.examPlan.length) S.examPlan = buildExamPlan();
       show('screen-exam'); if (worldOn()) FZ.World.setPhase('exam'); renderExam(); return;
@@ -906,6 +927,12 @@ window.FZ = window.FZ || {};
     $('#event-kicker').textContent = ev.forced ? '突发状况' : `${FZ.SLOTS[S.slot].full} · 事件 ${((S.day - 1) * 3 + S.slot) + 1} / 9`;
     $('#event-title').textContent = fill(ev.title);
     $('#event-text').textContent = fill(ev.text);
+    if (worldOn()) {
+      FZ.World.beginSlot({ scene: ev.scene, day: S.day, slot: S.slot });
+      const stand = FZ.World.standOf(ev.scene);
+      FZ.World.place(stand[0], stand[1], FZ.World.debug().yaw);
+      FZ.World.setPhase('event');
+    }
     renderStats(); renderTimeline(); renderCourses();
     if (S.resultShown) {
       $('#result-box').classList.add('on');
@@ -957,7 +984,6 @@ window.FZ = window.FZ || {};
 
   /* 三个下拉互相排除，主攻额外可以自定义。want 用来在重建选项后指定选中值 */
   function syncCourseSelects(want) {
-    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     const cur = [$('#subject-select').value, $('#side-1').value, $('#side-2').value];
     const vals = cur.map((v, i) => (want && want[i]) || v);
     COURSE_IDS.forEach((id, i) => {
@@ -1099,7 +1125,207 @@ window.FZ = window.FZ || {};
     return { major, subject, diff, sides };
   }
 
+  let campusNpc = null, campusTalking = null, campusLocked = false, campusReturnFocus = null;
+
+  function syncCampus() {
+    if (!S) return;
+    const count = (S.npcMet || []).length;
+    $('#npc-met-count').textContent = `${count} / ${FZ.NPCS.length}`;
+    $('#campus-met-summary').textContent = `本局相识 ${count} / ${FZ.NPCS.length}`;
+    $('#btn-campus').disabled = S.phase !== 'event';
+    if (!worldOn()) {
+      const night = S.slot === 2;
+      document.body.dataset.timeOfDay = night ? 'night' : 'day';
+      $('#world-time-label').textContent = `${FZ.SLOTS[Math.min(S.slot, 2)].full} · ${night ? '夜晚' : '白天'}`;
+    }
+  }
+
+  function renderCampus() {
+    const npc = FZ.NPCS.find((n) => n.id === campusNpc);
+    if (!npc || !S) return;
+    const slot = Math.min(S.slot, 2);
+    const status = worldOn() ? FZ.World.npcStatus().find((n) => n.id === npc.id) : null;
+    const nearby = !!(status && status.nearby);
+    const near = campusTalking === npc.id && (!worldOn() || nearby);
+    const faceToFace = worldOn() && near;
+    $('#campus-dialog').classList.toggle('face-to-face', faceToFace);
+    document.body.classList.toggle('npc-chatting', faceToFace);
+    $('#campus-dialog-title').textContent = faceToFace ? '面对面交谈' : '校园里的人';
+    $('#btn-campus-browse').hidden = !faceToFace;
+    $('#btn-campus-close').textContent = faceToFace ? '结束交谈' : '关闭 ×';
+    $('#btn-campus-close').setAttribute('aria-label', faceToFace ? '结束交谈' : '关闭校园人物');
+    if (worldOn()) FZ.World.focusNPC(faceToFace ? npc.id : null);
+    if (!worldOn()) {
+      if (near) FZ.Audio.setEnvironment({ scene: npc.places[slot], slot, active: true });
+      else syncFlatEnvironment();
+    }
+    if (near && !(S.npcMet || []).includes(npc.id)) {
+      S.npcMet = (S.npcMet || []).concat(npc.id);
+      saveRun();
+    }
+    syncCampus();
+    $('#npc-roster').replaceChildren();
+    FZ.NPCS.forEach((person) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.npc = person.id;
+      b.style.setProperty('--npc-color', person.color);
+      b.setAttribute('aria-pressed', String(person.id === npc.id));
+      const avatar = document.createElement('span');
+      avatar.className = 'npc-avatar'; avatar.textContent = person.mark;
+      avatar.setAttribute('aria-hidden', 'true');
+      const name = document.createElement('span');
+      const title = document.createElement('b'); title.textContent = person.name;
+      const role = document.createElement('small'); role.textContent = person.role;
+      name.append(title, role); b.append(avatar, name);
+      if ((S.npcMet || []).includes(person.id)) {
+        const dot = document.createElement('span');
+        dot.className = 'npc-met-dot'; dot.setAttribute('aria-label', '已相识');
+        b.append(dot);
+      }
+      b.addEventListener('click', () => {
+        campusNpc = person.id;
+        // 选中就站在身边的人时直接进入交谈；远处人物先看资料，再点「去找 TA」。
+        const nearby = worldOn() && FZ.World.npcStatus().some((n) => n.id === person.id && n.nearby);
+        campusTalking = nearby ? person.id : null;
+        renderCampus();
+        // 面对面会隐藏名单，焦点不能再留在被隐藏的按钮上；以渲染结果为准，避免状态二次变化。
+        const face = $('#campus-dialog').classList.contains('face-to-face');
+        const target = face ? $('#btn-campus-close') : $(`#npc-roster button[data-npc="${person.id}"]`);
+        target.focus({ preventScroll: true });
+        if (face) $('#campus-dialog').scrollTop = 0;
+      });
+      $('#npc-roster').append(b);
+    });
+    $('.npc-conversation').style.setProperty('--npc-color', npc.color);
+    $('#npc-portrait').textContent = npc.mark;
+    $('#npc-role').textContent = npc.role;
+    $('#npc-name').textContent = npc.name;
+    const place = FZ.World.locName(npc.places[slot]);
+    $('#npc-location').textContent = `第 ${S.day} 天 · ${FZ.SLOTS[slot].full} · ${place}` +
+      (status ? (nearby ? ' · 就在身边' : ` · ${Math.round(status.distance)} m`) : '');
+    $('#npc-bio').textContent = npc.bio;
+    $('#npc-question').textContent = '';
+    $('#npc-reply').textContent = near ? fill(npc.greeting[slot]) : `${npc.name}现在在${place}。${worldOn() ? '可以沿校园小路去找 TA，聊聊复习，也聊聊生活。' : '平面模式下也可以直接聊天。'}`;
+    $('#npc-topics').replaceChildren();
+    $('#npc-chat-form').hidden = !near;
+    $('#npc-chat-input').value = '';
+    if (near) npc.topics.forEach((topic) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = topic.label; b.dataset.topic = topic.id;
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => {
+        $$('#npc-topics button').forEach((el) => el.setAttribute('aria-pressed', String(el === b)));
+        $('#npc-question').textContent = `你问：${topic.label}`;
+        $('#npc-reply').textContent = fill(topic.replies[slot]);
+        FZ.Audio.play('chatReply');
+      });
+      $('#npc-topics').append(b);
+    });
+    const visit = $('#btn-npc-visit');
+    visit.hidden = near;
+    visit.disabled = !nearby && worldOn() && S.resultShown;
+    visit.textContent = worldOn() && !nearby ? `去${place}找${npc.name}` : `和${npc.name}聊聊`;
+    $('#npc-note').textContent = near ? '可以点话题，也可以输入文字按回车发送。结束交谈后继续本时段事件。' :
+      (worldOn() && S.resultShown ? '本时段已做出选择，继续到下一时段后就能自由拜访。' : '不会消耗时段，也不会提供可重复刷取的数值奖励。');
+  }
+
+  function releaseCampus() {
+    if ($('#campus-dialog').open) return;
+    campusTalking = null;
+    $('#campus-dialog').classList.remove('face-to-face');
+    document.body.classList.remove('npc-chatting');
+    if (FZ.World.isOk()) FZ.World.focusNPC(null);
+    if (!worldOn()) syncFlatEnvironment();
+    if (campusLocked) { FZ.World.setInteractionLocked(false); campusLocked = false; }
+    if (!$('#campus-dialog').open && campusReturnFocus) {
+      const target = campusReturnFocus;
+      campusReturnFocus = null;
+      (target.isConnected && !target.disabled ? target : $('#btn-campus')).focus();
+    }
+  }
+
+  function closeCampus() {
+    $('#campus-dialog').close();
+    releaseCampus();
+  }
+
+  function openCampus(id) {
+    if (!S || S.phase !== 'event' || !$('#screen-game').classList.contains('active')) return;
+    skipType();
+    if (!$('#campus-dialog').open) {
+      // 交互锁会禁用附近按钮，先保存焦点，关闭后再恢复。
+      const active = document.activeElement;
+      campusReturnFocus = active !== document.body && !$('#campus-dialog').contains(active) ? active : $('#btn-campus');
+    }
+    campusNpc = id || (worldOn() && FZ.World.nearestNpc()) || campusNpc || FZ.NPCS[0].id;
+    campusTalking = id || null;
+    if (worldOn()) { FZ.World.setInteractionLocked(true); campusLocked = true; }
+    FZ.Voice.stop();
+    renderCampus();
+    if (!$('#campus-dialog').open) { $('#campus-dialog').showModal(); FZ.Audio.play('chatOpen'); }
+    $('#campus-dialog').scrollTop = 0;
+    $('#btn-campus-close').focus({ preventScroll: true });
+  }
+
   function bind() {
+    $('#btn-campus').addEventListener('click', () => openCampus());
+    $('#btn-talk').addEventListener('click', () => {
+      const id = worldOn() && FZ.World.nearestNpc();
+      if (id) openCampus(id);
+    });
+    $('#npc-chat-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = $('#npc-chat-input');
+      const text = input.value.trim().slice(0, 160);
+      if (!text || !S || S.phase !== 'event' || !$('#campus-dialog').open) return;
+      const npc = FZ.NPCS.find((n) => n.id === campusNpc);
+      const near = worldOn() ? FZ.World.npcStatus().some((n) => n.id === campusNpc && n.nearby) : campusTalking === campusNpc;
+      if (!near) return;
+      const slot = Math.min(S.slot, 2), lower = text.toLowerCase();
+      const matches = npc.topics.map((topic) => ({
+        topic, score: (FZ.NPC_CHAT_WORDS[topic.id] || []).reduce((best, word) => lower.includes(word) ? Math.max(best, word.length) : best, 0)
+      })).sort((a, b) => b.score - a.score);
+      let reply;
+      if (/^(你好|您好|嗨|哈喽|hello|hi|早上好|晚上好|在吗)[！!，,。.?？\s]*$/i.test(text)) reply = npc.greeting[slot];
+      else if (/谢谢|感谢|多谢/.test(text)) reply = `不客气。${npc.greeting[slot]}`;
+      else if (matches[0].score) reply = matches[0].topic.replies[slot];
+      else reply = `这句我还没太明白。我比较熟悉「${npc.topics.map((t) => t.label).join('」「')}」，你可以换个关键词，或者点上面的话题。`;
+      $('#npc-question').textContent = `你说：${text}`;
+      $('#npc-reply').textContent = fill(reply);
+      $$('#npc-topics button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      input.value = ''; input.focus();
+      FZ.Audio.play('chatReply');
+    });
+    $('#btn-campus-browse').addEventListener('click', () => {
+      campusTalking = null; renderCampus();
+      $(`#npc-roster button[data-npc="${campusNpc}"]`).focus();
+    });
+    $('#btn-campus-close').addEventListener('click', closeCampus);
+    $('#campus-dialog').addEventListener('close', releaseCampus);
+    $('#campus-dialog').addEventListener('keydown', (e) => { if (e.currentTarget.open) e.stopPropagation(); });
+    $('#campus-dialog').addEventListener('click', (e) => {
+      if (e.target !== e.currentTarget) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeCampus();
+    });
+    $('#btn-npc-visit').addEventListener('click', () => {
+      if (!S || S.phase !== 'event') return;
+      if (!worldOn() || FZ.World.npcStatus().some((n) => n.id === campusNpc && n.nearby)) {
+        campusTalking = campusNpc; renderCampus();
+        $('#campus-dialog').scrollTop = 0;
+        $('#btn-campus-close').focus({ preventScroll: true });
+        FZ.Audio.play('chatOpen');
+        return;
+      }
+      if (S.resultShown) return;
+      const id = campusNpc;
+      closeCampus();
+      $('#roam-day').textContent = S.day;
+      $('#roam-slot').textContent = FZ.SLOTS[S.slot].full;
+      $('#roam-teaser').textContent = `拜访后，仍可回到「${fill(S.currentEvent.title)}」。`;
+      if (!FZ.World.goToNPC(id)) toast('暂时无法前往，请先回到自由行动', '#FFB020');
+    });
     $('#btn-start').addEventListener('click', () => {
       FZ.Audio.unlock(); FZ.Audio.play('page');
       const s = currentSetup();
@@ -1119,6 +1345,7 @@ window.FZ = window.FZ || {};
     });
     $('#btn-next').addEventListener('click', advance);
     $('#btn-dayend-next').addEventListener('click', () => {
+      if (!S || S.phase !== 'dayend') return;
       FZ.Audio.play('page');
       $('#overlay-dayend').classList.remove('on');
       if (worldOn()) FZ.World.place(-21.4, -0.4, 0.764);
@@ -1219,11 +1446,27 @@ window.FZ = window.FZ || {};
     });
 
     document.addEventListener('keydown', (e) => {
+      if ($('#campus-dialog').open) return;
       const tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       if (e.key === 'm' || e.key === 'M') { $('#btn-sound').click(); return; }
       if (e.key === 'Escape') { skipType(); return; }
+      if (S && S.phase === 'dayend') {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          if (!e.repeat) $('#btn-dayend-next').click();
+        }
+        return;
+      }
       if ($('#screen-game').classList.contains('active')) {
+        const key = String(e.key).toLowerCase();
+        if (key === 'c' && !e.repeat) { e.preventDefault(); openCampus(); return; }
+        if (key === 't' && !e.repeat) {
+          e.preventDefault();
+          const id = worldOn() && FZ.World.nearestNpc();
+          if (id) openCampus(id);
+          return;
+        }
         if (worldOn() && FZ.World.isRoaming()) {
           if (e.key === ' ' || e.key === 'Enter' || String(e.key).toLowerCase() === 'f') { e.preventDefault(); FZ.World.goTo(); }
           return;
@@ -1275,18 +1518,24 @@ window.FZ = window.FZ || {};
     if (!on) {
       document.body.dataset.wphase = 'off';
       FZ.World.stop();
+      syncFlatEnvironment();
       $('.courses-panel').classList.remove('on');
       if (S && S.currentEvent && !S.resultShown && $('#screen-game').classList.contains('active') && !$('#event-text').textContent) renderEventNarrative();
       return;
     }
     FZ.World.start();
     FZ.World.resize();
-    if (!S || S.finished) FZ.World.setPhase('title');
+    if (!S) FZ.World.setPhase('title');
+    else if (S.finished) FZ.World.setPhase('result');
     else if (S.phase === 'exam') FZ.World.setPhase('exam');
     else if (S.phase === 'dayend') FZ.World.setPhase('dayend');
     else if ($('#screen-game').classList.contains('active')) {
-      if ($('#event-text').textContent) FZ.World.setPhase('event');
-      else {
+      if ($('#event-text').textContent) {
+        FZ.World.beginSlot({ scene: S.currentEvent.scene, day: S.day, slot: S.slot });
+        const stand = FZ.World.standOf(S.currentEvent.scene);
+        FZ.World.place(stand[0], stand[1], FZ.World.debug().yaw);
+        FZ.World.setPhase('event');
+      } else {
         FZ.World.beginSlot({ scene: S.currentEvent.scene, day: S.day, slot: S.slot, label: FZ.SLOTS[S.slot].full + ' · 事件在这里' });
         $('#roam-day').textContent = S.day;
         $('#roam-slot').textContent = FZ.SLOTS[S.slot].full;
@@ -1320,6 +1569,10 @@ window.FZ = window.FZ || {};
           if (!S || !S.currentEvent || S.resultShown) return;
           FZ.Audio.play('page');
           renderEventNarrative();
+        });
+        FZ.World.onNpcArrive((id) => {
+          if (S && S.phase === 'event' && $('#screen-game').classList.contains('active')) openCampus(id);
+          else FZ.World.setInteractionLocked(false);
         });
         const q = meta.quality || FZ.World.quality();
         $('#quality-select').value = q;

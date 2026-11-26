@@ -1,18 +1,21 @@
-/* 三维夜间校园：单场景、可行走、第一人称。
-   渲染预算固定：一个 rAF 循环、复用几何与材质、阴影烘焙一次、pixelRatio 封顶。 */
+/* 三维昼夜校园：单场景、第一人称、可交流人物。
+   一个 rAF 循环、缓存几何与材质、静态阴影按昼夜刷新、pixelRatio 封顶。 */
 window.FZ = window.FZ || {};
 
 FZ.World = (function () {
   const T = window.THREE;
 
   const LOC = {
-    dorm:      { name: '宿舍',     stand: [-21.4, -0.4], yaw: 0.764,       pitch: -0.07, door: [-13.5, -2],   rect: [-22, -2, 14, 16] },
-    online:    { name: '宿舍书桌', stand: [-21.4, -0.4], yaw: 0.764,       pitch: -0.09, door: [-13.5, -2],   rect: [-22, -2, 14, 16] },
-    library:   { name: '图书馆',   stand: [0, -17.4],   yaw: 0,            pitch: -0.20, door: [0, -13.5],    rect: [0, -22, 24, 14] },
-    classroom: { name: '教学楼',   stand: [20.9, -1.7], yaw: -Math.PI / 2, pitch: -0.06, door: [13.5, 0],     rect: [22, 0, 14, 20] },
-    canteen:   { name: '食堂',     stand: [0, 17.6],    yaw: Math.PI,      pitch: -0.03, door: [0, 14.5],     rect: [0, 22, 20, 12] },
-    print:     { name: '打印店',   stand: [-11, 10.2],    yaw: Math.PI,      pitch: -0.04, door: [-11, 8.2],    rect: [-11, 12, 6, 5] },
-    campus:    { name: '中庭',     stand: [3.6, 10.0],   yaw: 0.152,        pitch: -0.04, door: [0, 9],        rect: null }
+    dorm:      { name: '宿舍',     short: '宿舍', stand: [-21.4, -0.4], yaw: 0.764,       pitch: -0.07, door: [-13.5, -2],   rect: [-22, -2, 14, 16] },
+    online:    { name: '宿舍书桌', short: '书桌', stand: [-21.4, -0.4], yaw: 0.764,       pitch: -0.09, door: [-13.5, -2],   rect: [-22, -2, 14, 16] },
+    library:   { name: '图书馆',   short: '图书', stand: [0, -17.4],   yaw: 0,            pitch: -0.20, door: [0, -13.5],    rect: [0, -22, 24, 14] },
+    classroom: { name: '教学楼',   short: '教学', stand: [20.9, -1.7], yaw: -Math.PI / 2, pitch: -0.06, door: [13.5, 0],     rect: [22, 0, 14, 20] },
+    canteen:   { name: '食堂',     short: '食堂', stand: [0, 17.6],    yaw: Math.PI,      pitch: -0.03, door: [0, 14.5],     rect: [0, 22, 20, 12] },
+    print:     { name: '打印店',   short: '打印', stand: [-11, 10.2],    yaw: Math.PI,      pitch: -0.04, door: [-11, 8.2],    rect: [-11, 12, 6, 5] },
+    campus:    { name: '中庭',     short: '中庭', stand: [3.6, 10.0],   yaw: 0.152,        pitch: -0.04, door: [0, 9],        rect: null, outdoor: true },
+    court:     { name: '篮球场',   short: '球场', stand: [22, -21],     yaw: 0,            pitch: -0.04, door: [15, -17],     rect: [23, -23, 14, 12], outdoor: true },
+    garden:    { name: '静心花园', short: '花园', stand: [-22, -22],    yaw: 0.35,         pitch: -0.04, door: [-17, -14],    rect: [-23, -23, 12, 12], outdoor: true },
+    cafe:      { name: '咖啡角',   short: '咖啡', stand: [23, 20.5],    yaw: Math.PI,      pitch: -0.04, door: [13, 0],       approach: [[13, 14], [23, 16.5]], rect: [23, 23, 10, 10] }
   };
   const RING = 11;
   const EYE = 1.62;
@@ -23,11 +26,11 @@ FZ.World = (function () {
     ink: 0x0a0d1c, danger: 0xff4d4d
   };
 
-  /* 每个时段的天光：清晨冷蓝、午后灰白、深夜靛蓝。宿舍的暖灯始终压过天光。 */
+  /* 仍使用原来的三个 slot：清晨/午后为白天，第三段为夜晚。 */
   const SKY = [
-    { top: 0x1b2a4d, mid: 0x3d4f74, bot: 0x6d6a72, fog: 0x2a3550, fogD: 0.011, moon: 0.55, hemi: 0.4, moonCol: 0xbcd2ff, lamp: 0.9, room: 1.05, env: 0.38, lift: 0.006, exposure: 1.04, star: 0.25 },
-    { top: 0x53617f, mid: 0x8b93a6, bot: 0xb0aca6, fog: 0x767c8c, fogD: 0.008, moon: 0.85, hemi: 0.8, moonCol: 0xdfe6f2, lamp: 0.45, room: 1.7, env: 0.55, lift: 0.0, exposure: 1.0, star: 0.0 },
-    { top: 0x05070f, mid: 0x0d1226, bot: 0x1d2140, fog: 0x0b1020, fogD: 0.011, moon: 0.30, hemi: 0.06, moonCol: 0x8fb4ff, lamp: 1.4, room: 0.14, env: 0.1, lift: 0.026, exposure: 1.16, star: 1.0 }
+    { top: 0x427fbc, mid: 0x91badd, bot: 0xefcfac, fog: 0xb2c8d8, fogD: 0.0025, moon: 1.35, hemi: 0.8, moonCol: 0xffe0b4, lamp: 0.3, room: 1.05, env: 0.38, lift: 0.0, exposure: 0.96, star: 0 },
+    { top: 0x367fbf, mid: 0x99c6e5, bot: 0xd9e6ec, fog: 0xb8d5e5, fogD: 0.002, moon: 1.6, hemi: 0.95, moonCol: 0xfff1db, lamp: 0.2, room: 1.2, env: 0.42, lift: 0.0, exposure: 0.94, star: 0 },
+    { top: 0x050a1c, mid: 0x13233f, bot: 0x26364f, fog: 0x15233a, fogD: 0.005, moon: 0.48, hemi: 0.3, moonCol: 0xa8caff, lamp: 1.0, room: 0.85, env: 0.18, lift: 0.002, exposure: 1.04, star: 1.0 }
   ];
 
   let renderer, scene, camera, composer, bloom, gradePass, pmremRT;
@@ -36,8 +39,16 @@ FZ.World = (function () {
   let last = 0, elapsed = 0, hudTick = 0;
   let hemi, moon, roomLight, dormLamp, libLamp, examLampA, examLampB;
   let skyMat, stars, dust, steam, groundMat, plazaMat;
-  let marker, markerBeam, markerLabel, markerRing;
-  let skyDome, moonSprite, moonPool, winMat, winPane, winShaft;
+  let marker, markerBeam, markerLabel, markerRing, routeArrows;
+  const routeTransform = new T.Object3D();
+  const hud = {};
+  let guideCache = null, mapBase = null, mapSize = '', arrivalTimer = 0;
+  const batches = { meshes: 0, groups: 0 };
+  let skyDome, moonSprite, moonDisc, sunDisc, clouds, moonPool, winMat, winPane, winShaft;
+  const npcs = [], walkers = [], campusLights = [], sightObjects = [], occupancy = [];
+  let campusCat, npcTarget = null, npcArriveCb = null, interactionLocked = false;
+  let storyArrivalHeld = false, storyMarkerMap = null, npcHudTick = 0, conversation = null;
+  const sightRay = new T.Raycaster(), sightOrigin = new T.Vector3(), sightDir = new T.Vector3();
   const colliders = [];
   const geoCache = new Map(), matCache = new Map(), texCache = new Map();
   const lampFlicker = [];
@@ -443,10 +454,21 @@ FZ.World = (function () {
     moonSprite.position.set(-90, 78, -140);
     moonSprite.scale.set(46, 46, 1);
     scene.add(moonSprite);
-    const disc = mesh(geo('moonDisc', () => new T.CircleGeometry(7, 32)),
+    moonDisc = mesh(geo('moonDisc', () => new T.CircleGeometry(7, 32)),
       mat('moonDisc', { color: 0xf2f6ff, fog: false }, 'basic'), -90, 78, -140);
-    disc.lookAt(0, 0, 0);
-    disc.material.transparent = true; disc.material.opacity = 0.95;
+    moonDisc.lookAt(0, 0, 0);
+    sunDisc = mesh(geo('sunDisc', () => new T.CircleGeometry(5, 32)),
+      mat('sunDisc', { color: 0xffe5af, fog: false }, 'basic'), 100, 72, -130);
+    sunDisc.lookAt(0, 0, 0);
+    clouds = new T.Group(); scene.add(clouds);
+    const cloudGeo = geo('cloud', () => new T.SphereGeometry(1, 12, 8));
+    const cloudMat = mat('cloud', { color: 0xe2eef5, fog: false, transparent: true, opacity: 0.72, depthWrite: false }, 'basic');
+    [[-75, 64, -135], [90, 82, 105], [25, 58, -168]].forEach((p) => {
+      for (let i = 0; i < 3; i++) {
+        const c = mesh(cloudGeo, cloudMat, p[0] + i * 9, p[1] + (i % 2) * 2, p[2], clouds);
+        c.scale.set(13, 3 + i % 2, 6);
+      }
+    });
   }
 
   function buildEnv() {
@@ -1147,7 +1169,10 @@ FZ.World = (function () {
     scene.add(steam);
 
     for (let i = -1; i <= 1; i++) ceilingPanel(g, i * 6, -1, 3.4, 0.3, 0xffe9c8, 0.8, 'can');
-    const cl = new T.PointLight(0xffb066, 1.5, 18, 2); cl.position.set(0, 2.4, 24); scene.add(cl);
+    const cl = new T.PointLight(0xffd6a5, 1.5, 18, 2); cl.position.set(0, 2.4, 24); scene.add(cl);
+    campusLights.push({ light: cl, day: 0.65, night: 1.65 });
+    const entryLight = new T.PointLight(0xffddb6, 1, 11, 2); entryLight.position.set(0, 2.7, 18); scene.add(entryLight);
+    campusLights.push({ light: entryLight, day: 0.55, night: 1.35 });
     return g;
   }
 
@@ -1190,9 +1215,346 @@ FZ.World = (function () {
     const sign = mesh(geo('plane1'), mat('neonM', { map: texNeon(), emissive: 0xffffff, emissiveMap: texNeon(), emissiveIntensity: 2.0, color: 0x0a0710, transparent: true, roughness: 0.4 }), 0, 2.42, 2.44, g);
     sign.scale.set(4.0, 0.86, 1); sign.rotation.y = Math.PI;
     lampFlicker.push({ m: sign.material, base: 2.0, seed: 7.7 });
-    const nl = new T.PointLight(0xff3d8b, 0.85, 9, 2); nl.position.set(-11, 2.4, 14.0); scene.add(nl);
+    const nl = new T.PointLight(0xff86b5, 0.85, 9, 2); nl.position.set(-11, 2.4, 14.0); scene.add(nl);
+    campusLights.push({ light: nl, day: 0.25, night: 0.9 });
+    const workLight = new T.PointLight(0xffedd4, 1, 8, 2); workLight.position.set(-11, 2.5, 10.6); scene.add(workLight);
+    campusLights.push({ light: workLight, day: 0.6, night: 1.2 });
     ceilingPanel(g, 0, 0, 2.4, 0.2, 0xfff0d8, 1.0, 'prt', 2.78);
     return g;
+  }
+
+  /* ---------- 站立人物：不复用伏案 figure，也不加入人物碰撞 ---------- */
+  function buildCampusCorners() {
+    const stone = mat('cornerStone', { color: 0x98a7a2, roughness: 0.95 });
+    const wood = mat('cornerWood', { color: 0x976e49, roughness: 0.85 });
+    const iron = mat('cornerIron', { color: 0x354953, roughness: 0.65 });
+    const pathMat = mat('cornerPath', { color: 0x88918c, roughness: 0.95 });
+    ['court', 'garden', 'cafe'].forEach((key) => {
+      const L = LOC[key], points = [ringPt(...L.door), L.door, ...(L.approach || []), L.stand];
+      for (let i = 1; i < points.length; i++) {
+        const a = points[i - 1], b = points[i], dx = b[0] - a[0], dz = b[1] - a[1];
+        const strip = mesh(box(1.65, 0.015, Math.hypot(dx, dz)), pathMat, (a[0] + b[0]) / 2, 0.022, (a[1] + b[1]) / 2);
+        strip.rotation.y = Math.atan2(dx, dz); strip.receiveShadow = true;
+      }
+    });
+    const sign = (key, subtitle, x, z, yaw) => {
+      const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = yaw; scene.add(g);
+      mesh(box(0.09, 2.3, 0.09), iron, -1.15, 1.15, 0, g);
+      mesh(box(0.09, 2.3, 0.09), iron, 1.15, 1.15, 0, g);
+      const map = tex('cornerSign' + key, 768, 256, (c, w, h) => {
+        c.fillStyle = key === 'cafe' ? '#573e32' : '#244c47'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = '#d9bd7b'; c.lineWidth = 8; c.strokeRect(10, 10, w - 20, h - 20);
+        c.fillStyle = '#fff4da'; c.textAlign = 'center'; c.font = `700 68px ${FONT}`; c.fillText(LOC[key].name, w / 2, 112);
+        c.font = `500 32px ${FONT}`; c.fillText(subtitle, w / 2, 190);
+      });
+      const board = mesh(geo('plane1'), mat('cornerSign' + key, { map, side: T.DoubleSide, roughness: 0.9, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: 0.16 }), 0, 1.95, 0, g);
+      board.scale.set(2.8, 0.94, 1);
+      solid(x, z, 1.4, 0.2);
+    };
+
+    const court = mesh(box(14, 0.035, 12), mat('courtRubber', { color: 0x4b8176, roughness: 1 }), 23, 0.025, -23);
+    court.receiveShadow = true;
+    const paint = mat('courtPaint', { color: 0xe9e2c7, roughness: 1 });
+    [-28.3, -17.7, -23].forEach((z) => mesh(box(12.5, 0.015, 0.055), paint, 23, 0.052, z));
+    [16.75, 29.25].forEach((x) => mesh(box(0.055, 0.015, 10.6), paint, x, 0.052, -23));
+    const center = mesh(geo('courtCircle', () => new T.RingGeometry(1.48, 1.54, 32)), paint, 23, 0.062, -23);
+    center.rotation.x = -Math.PI / 2;
+    [-1, 1].forEach((side) => {
+      const z = -23 + side * 5;
+      mesh(cyl(0.085, 0.1, 3.65, 8), iron, 23, 1.825, z);
+      mesh(box(1.8, 1.05, 0.1), paint, 23, 3.25, z - side * 0.25);
+      const rim = mesh(geo('basketRim', () => new T.TorusGeometry(0.25, 0.025, 6, 16)), mat('basketOrange', { color: 0xf28a43, roughness: 0.7 }), 23, 2.95, z - side * 0.58);
+      rim.rotation.x = Math.PI / 2;
+      mesh(cyl(0.26, 0.17, 0.4, 10), mat('basketNet', { color: 0xe5e0cb, wireframe: true }), 23, 2.72, z - side * 0.58);
+      solid(23, z, 0.18, 0.18);
+    });
+    mesh(geo('basketball', () => new T.SphereGeometry(0.22, 16, 10)), mat('basketball', { color: 0xc77b3e, roughness: 1 }), 27, 0.27, -24.5);
+    bench(30.9, -22, Math.PI / 2); streetLamp(30.5, -17);
+    sign('court', '活动一下，再回去复习', 28, -16, Math.PI / 6);
+
+    const garden = mesh(box(12, 0.025, 12), mat('gardenGrass', { color: 0x647e50, roughness: 1 }), -23, 0.025, -23);
+    garden.receiveShadow = true;
+    mesh(box(4, 0.035, 10), pathMat, -22, 0.043, -22.5);
+    [-27.5, -18.5].forEach((x) => {
+      mesh(box(1.1, 0.45, 6), stone, x, 0.225, -24);
+      mesh(box(0.95, 0.04, 5.85), mat('gardenSoil', { color: 0x51442e, roughness: 1 }), x, 0.47, -24);
+      for (let i = 0; i < 10; i++) {
+        const z = -26.6 + i * 0.57;
+        mesh(cyl(0.014, 0.018, 0.3, 5), mat('gardenStem', { color: 0x3b6a40, roughness: 1 }), x, 0.62, z);
+        const flower = mesh(geo('gardenFlower', () => new T.IcosahedronGeometry(0.15, 0)), mat('gardenFlower' + i % 2, { color: i % 2 ? 0xf1c46e : 0xc397cf, roughness: 1 }), x, 0.81, z);
+        flower.scale.y = 0.5;
+      }
+      solid(x, -24, 0.55, 3);
+    });
+    bench(-24.2, -27, 0); bench(-25.5, -19, Math.PI);
+    tree(-29.5, -19, 0.9); tree(-17.5, -28.7, 0.9); streetLamp(-29.3, -25.5);
+    sign('garden', '听风，也给自己一点空白', -24, -16, 0);
+    [-24.6, -20].forEach((x) => {
+      mesh(box(0.1, 2.6, 0.1), wood, x, 1.3, -27.8);
+      solid(x, -27.8, 0.1, 0.1);
+    });
+    for (let i = 0; i < 6; i++) mesh(box(4.9, 0.1, 0.12), wood, -22.3, 2.6, -28.3 + i * 0.25);
+
+    const cafe = shell({ cx: 23, cz: 23, w: 10, d: 10, h: 3.7, front: 'n', doorW: 4.5, key: 'cafe', floor: 'wood', tint: 0xc6ad8b, spillDir: -1 });
+    mesh(box(6.8, 1.05, 0.85), wood, 0, 0.525, 2.6, cafe);
+    solid(23, 25.6, 3.4, 0.425);
+    mesh(box(6.95, 0.08, 0.98), mat('cafeCounter', { color: 0xe9d8b8, roughness: 0.65 }), 0, 1.09, 2.6, cafe);
+    mesh(box(0.95, 0.65, 0.55), iron, 1.8, 1.45, 2.6, cafe);
+    mesh(box(0.8, 0.16, 0.03), mat('cafeMachine', { color: 0xd4ddce, roughness: 0.6 }), 1.8, 1.42, 2.31, cafe);
+    const cups = mat('cafeCups', { color: 0xf7e5c0, roughness: 0.5 });
+    for (let i = 0; i < 4; i++) mesh(cyl(0.09, 0.07, 0.18, 12), cups, -1.6 + i * 0.45, 1.22, 2.6, cafe);
+    [-3.7, 3.7].forEach((x) => {
+      mesh(cyl(0.6, 0.6, 0.08, 16), wood, x, 0.8, -0.5, cafe);
+      mesh(cyl(0.09, 0.22, 0.77, 8), iron, x, 0.385, -0.5, cafe);
+      mesh(cyl(0.22, 0.23, 0.47, 10), iron, x, 0.235, -1.6, cafe);
+      mesh(cyl(0.09, 0.07, 0.18, 12), cups, x + 0.12, 0.93, -0.5, cafe);
+      solid(23 + x, 22.5, 0.6, 0.6); solid(23 + x, 21.4, 0.23, 0.23);
+    });
+    ceilingPanel(cafe, -2, 0, 1.8, 0.65, 0xffd79c, 1.0, 'cafeA', 3.5);
+    ceilingPanel(cafe, 2, 0, 1.8, 0.65, 0xffd79c, 1.0, 'cafeB', 3.5);
+    sign('cafe', '复习间隙，聊点生活', 27.8, 16.1, -Math.PI / 12);
+    bench(19, 16.8, 0); streetLamp(29.8, 17.2);
+  }
+
+  function standingPerson(data, seed) {
+    const g = new T.Group(), body = new T.Group(), head = new T.Group();
+    scene.add(g); g.userData.person = true; g.add(body); body.position.y = 0.86;
+    body.add(head); head.position.y = 0.69;
+    const skin = mat('npcSkin' + seed % 3, { color: [0xdca783, 0xb9805e, 0xeac3a2][seed % 3], roughness: 0.85 });
+    const cloth = mat('npcCloth' + data.color, { color: data.color, roughness: 0.85 });
+    const dark = mat('npcTrouser', { color: 0x29374d, roughness: 0.9 });
+    const hair = mat('npcHair', { color: 0x251d1b, roughness: 1 });
+    const white = mat('npcWhite', { color: 0xf1ede1, roughness: 0.9 });
+    mesh(box(0.44, 0.58, 0.28), cloth, 0, 0.29, 0, body);
+    mesh(cyl(0.075, 0.075, 0.12, 8), skin, 0, 0.61, 0, body);
+    mesh(geo('npcHead', () => new T.SphereGeometry(0.17, 14, 10)), skin, 0, 0, 0, head);
+    mesh(geo('npcHair', () => new T.SphereGeometry(0.177, 14, 10, 0, Math.PI * 2, 0, 1.65)), hair, 0, 0.035, -0.012, head);
+    [-0.063, 0.063].forEach((x) => mesh(box(0.025, 0.031, 0.018), hair, x, 0.015, 0.151, head));
+    mesh(box(0.055, 0.012, 0.015), mat('npcMouth', { color: 0x975951, roughness: 1 }), 0, -0.077, 0.154, head);
+    mesh(box(0.035, 0.044, 0.04), skin, 0, -0.019, 0.16, head);
+    const legs = [], arms = [];
+    [-1, 1].forEach((side) => {
+      const leg = new T.Group(); leg.position.set(side * 0.125, 0.82, 0); g.add(leg); legs.push(leg);
+      mesh(box(0.16, 0.69, 0.19), dark, 0, -0.35, 0, leg);
+      mesh(box(0.18, 0.12, 0.32), white, 0, -0.76, 0.055, leg);
+      const arm = new T.Group(); arm.position.set(side * 0.285, 0.52, 0); body.add(arm); arms.push(arm);
+      arm.rotation.z = side * 0.06;
+      mesh(cyl(0.075, 0.06, 0.43, 8), cloth, 0, -0.19, 0, arm);
+      mesh(geo('npcHand', () => new T.SphereGeometry(0.065, 8, 6)), skin, 0, -0.45, 0, arm);
+    });
+    if (data.outfit === 'cook') {
+      mesh(box(0.38, 0.69, 0.035), white, 0, 0.11, 0.158, body);
+      mesh(cyl(0.19, 0.17, 0.18, 12), white, 0, 0.21, 0, head);
+      mesh(geo('chefTop', () => new T.SphereGeometry(0.22, 12, 8)), white, 0, 0.32, 0, head).scale.y = 0.65;
+    } else if (data.outfit === 'guard') {
+      mesh(cyl(0.185, 0.185, 0.1, 12), dark, 0, 0.17, 0, head);
+      mesh(box(0.3, 0.025, 0.18), dark, 0, 0.13, 0.15, head);
+      mesh(box(0.07, 0.08, 0.015), mat('npcBadge', { color: 0xeec767, metalness: 0.4, roughness: 0.4 }), -0.12, 0.38, 0.15, body);
+    } else if (data.outfit === 'barista') {
+      mesh(box(0.36, 0.61, 0.035), mat('npcApron', { color: 0x355c50, roughness: 1 }), 0, 0.14, 0.16, body);
+      mesh(box(0.2, 0.11, 0.04), white, 0, 0.06, 0.18, body);
+    } else if (data.outfit === 'gardener') {
+      mesh(cyl(0.27, 0.27, 0.04, 12), mat('npcHat', { color: 0xe1c28b, roughness: 1 }), 0, 0.17, 0, head);
+      mesh(cyl(0.17, 0.19, 0.16, 12), matCache.get('npcHat'), 0, 0.26, 0, head);
+    } else if (data.outfit === 'photographer') {
+      [-0.12, 0.12].forEach((x) => mesh(box(0.025, 0.34, 0.03), dark, x, 0.45, 0.17, body));
+      mesh(box(0.29, 0.19, 0.1), dark, 0, 0.25, 0.2, body);
+      mesh(cyl(0.065, 0.065, 0.08, 12), white, 0, 0.25, 0.29, body).rotation.x = Math.PI / 2;
+    } else if (data.outfit === 'staff') {
+      mesh(box(0.25, 0.32, 0.075), mat('npcBook', { color: 0x446c78, roughness: 0.8 }), -0.24, 0.04, 0.15, body);
+      mesh(box(0.045, 0.29, 0.02), white, 0, 0.36, 0.155, body);
+    } else {
+      mesh(box(0.32, 0.41, 0.17), dark, 0, 0.28, -0.21, body);
+      [-0.16, 0.16].forEach((x) => mesh(box(0.045, 0.47, 0.04), dark, x, 0.3, 0.15, body));
+      if (data.outfit === 'runner') mesh(cyl(0.178, 0.178, 0.045, 14), white, 0, 0.09, 0, head);
+    }
+    // 动态人像不烘焙进静态阴影，防止换地点后留下旧人影。
+    g.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
+    return { g, body, head, legs, arms, seed };
+  }
+
+  function sceneKey(key) { return key === 'online' ? 'dorm' : key; }
+  function areaAt(x, z) { return sceneKey(locAt(x, z) || 'campus'); }
+  function floorAt(key) { return key === 'campus' ? 0.015 : key === 'garden' || key === 'court' ? 0.06 : 0.03; }
+  function isIndoor(key) { return !!key && !LOC[key].outdoor; }
+  function syncEnvironment() {
+    const point = playerPoint();
+    FZ.Audio.setEnvironment({ scene: areaAt(...point), slot: slotNo, active: running && (phase === 'roam' || phase === 'event') });
+  }
+  function segmentDistance(x, z, a, b) {
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+    return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz);
+  }
+  function cacheCampusObstacles() {
+    scene.updateMatrixWorld(true);
+    scene.traverse((o) => {
+      if (!o.isMesh || !o.material || o.material.transparent) return;
+      for (let p = o; p; p = p.parent) { if (p.userData.person) return; }
+      const b = new T.Box3().setFromObject(o);
+      if (b.max.x < -38 || b.min.x > 38 || b.max.z < -38 || b.min.z > 38 || b.max.y < 0.15 || b.min.y > 2.5) return;
+      if (b.max.x - b.min.x > 35 || b.max.z - b.min.z > 35) return;
+      sightObjects.push(o);
+      occupancy.push(b);
+    });
+  }
+  function bodySpaceFree(x, z) {
+    if (blocked(x, z)) return false;
+    return !occupancy.some((b) => b.min.y < 1.85 && b.max.y > 0.12 &&
+      x + 0.34 > b.min.x && x - 0.34 < b.max.x && z + 0.34 > b.min.z && z - 0.34 < b.max.z);
+  }
+  function clearSight(ax, az, bx, bz) {
+    const d = Math.hypot(bx - ax, bz - az), steps = Math.max(1, Math.ceil(d / 0.16));
+    for (let i = 1; i < steps; i++) {
+      if (blocked(ax + (bx - ax) * i / steps, az + (bz - az) * i / steps)) return false;
+    }
+    sightOrigin.set(ax, EYE + floorAt(areaAt(ax, az)), az);
+    sightDir.set(bx - ax, 1.48 + floorAt(areaAt(bx, bz)) - sightOrigin.y, bz - az);
+    sightRay.set(sightOrigin, sightDir.normalize()); sightRay.near = 0.04; sightRay.far = Math.max(0.04, d - 0.12);
+    return sightRay.intersectObjects(sightObjects, false).length === 0;
+  }
+  function npcSpot(key, used) {
+    const L = LOC[key], entrance = L.approach ? L.approach[L.approach.length - 1] : L.door;
+    // 留出站位光环、门到站位的通道和校园导航环；同地最多三人，间距至少 0.95m。
+    for (const radius of [1.65, 2.15, 2.7]) {
+      for (let i = 0; i < 48; i++) {
+        const a = L.yaw + Math.PI + i * Math.PI * 2 / 48;
+        const x = L.stand[0] + Math.sin(a) * radius, z = L.stand[1] + Math.cos(a) * radius;
+        if (areaAt(x, z) !== key || !bodySpaceFree(x, z)) continue;
+        if (Math.hypot(x - entrance[0], z - entrance[1]) < 1.25 || segmentDistance(x, z, entrance, L.stand) < 0.7) continue;
+        if (key === 'campus' && Math.abs(Math.hypot(x, z) - RING) < 0.8) continue;
+        if (used.some((p) => Math.hypot(x - p[0], z - p[1]) < 0.95)) continue;
+        if (clearSight(L.stand[0], L.stand[1], x, z)) return [x, z];
+      }
+    }
+    return null; // 不把失败候选强塞到门口；goToNPC 会拒绝无安全落位的人物。
+  }
+  function buildNPCs() {
+    FZ.NPCS.forEach((data, i) => {
+      const n = Object.assign(standingPerson(data, i), { data, scene: 'campus', placed: false });
+      const map = tex('npcLabel' + data.id, 768, 224, (ctx, w) => {
+        ctx.fillStyle = 'rgba(12,24,39,0.96)'; ctx.fillRect(8, 8, w - 16, 190);
+        ctx.strokeStyle = data.color; ctx.lineWidth = 5; ctx.strokeRect(8, 8, w - 16, 190);
+        ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.font = `700 50px ${FONT}`;
+        ctx.fillText(data.name + ' · ' + data.role, w / 2, 80, w - 45);
+        ctx.font = `600 35px ${FONT}`; ctx.fillStyle = data.color; ctx.fillText('聊聊 · T 交谈', w / 2, 151);
+        ctx.beginPath(); ctx.moveTo(w / 2 - 18, 198); ctx.lineTo(w / 2, 221); ctx.lineTo(w / 2 + 18, 198); ctx.fill();
+      });
+      n.label = new T.Sprite(new T.SpriteMaterial({ map, transparent: true, depthTest: true, depthWrite: false, fog: false }));
+      n.label.scale.set(1.3, 0.38, 1); n.label.position.y = 2.25; n.label.visible = false; n.g.add(n.label);
+      n.markerMap = labelTexture(data.name, data.role + ' · 前往交谈');
+      npcs.push(n);
+    });
+    placeNPCs(slotNo);
+  }
+  function placeNPCs(slot) {
+    const used = Object.create(null);
+    npcs.forEach((n) => {
+      const key = sceneKey(n.data.places[Math.max(0, Math.min(2, slot))]);
+      n.scene = LOC[key] ? key : 'campus';
+      const group = used[n.scene] || (used[n.scene] = []);
+      const p = group.length < 3 ? npcSpot(n.scene, group) : null;
+      n.placed = !!p; n.g.visible = !!p; n.label.visible = false;
+      if (!p) return;
+      n.label.position.y = 2.03 + group.length * 0.15;
+      group.push(p); n.g.position.set(p[0], floorAt(n.scene), p[1]);
+      const L = LOC[n.scene]; n.g.rotation.y = Math.atan2(L.stand[0] - p[0], L.stand[1] - p[1]);
+    });
+    scene.updateMatrixWorld(true);
+  }
+  function playerPoint() { return phase === 'event' ? LOC[targetKey].stand : [P.x, P.z]; }
+  function npcStatus() {
+    const p = playerPoint(), area = areaAt(p[0], p[1]);
+    return npcs.map((n) => {
+      const distance = Math.hypot(p[0] - n.g.position.x, p[1] - n.g.position.z);
+      const visible = n.placed && area === n.scene && distance < 4.8 && clearSight(p[0], p[1], n.g.position.x, n.g.position.z);
+      return { id: n.data.id, scene: n.scene, distance, visible, nearby: visible && distance <= 3.8 };
+    });
+  }
+  function nearestNpc() {
+    const near = npcStatus().filter((n) => n.nearby).sort((a, b) => a.distance - b.distance);
+    return near.length ? near[0].id : null;
+  }
+  function updateNpcHud() {
+    const active = phase === 'roam' || phase === 'event', status = active ? npcStatus() : [];
+    const near = status.filter((n) => n.nearby).sort((a, b) => a.distance - b.distance)[0];
+    const person = near && npcs.find((n) => n.data.id === near.id);
+    const hint = hud['npc-nearby'], button = hud['btn-talk'];
+    const text = person ? person.data.name + ' · ' + person.data.role + ' · T 交谈' : '附近没有人 · 打开校园人物寻找';
+    if (hint && hint.textContent !== text) hint.textContent = text;
+    if (button) button.disabled = !person || inputBlocked() || !!npcTarget;
+    npcs.forEach((n, i) => { n.label.visible = active && !conversation && status[i].visible; });
+  }
+
+  /* 少量校园生活实物，全部远离导航环/门口，不增加碰撞。 */
+  function buildCampusLife() {
+    [[3, 4.5, 10], [-3, 4.5, -10]].forEach((p) => {
+      const light = new T.PointLight(0xffdeb4, 0, 16, 2); light.position.set(p[0], p[1], p[2]); scene.add(light);
+      campusLights.push({ light, day: 0, night: 1.5 });
+    });
+    const wood = mat('lifeWood', { color: 0x906448, roughness: 0.85 });
+    const metal = mat('lifeMetal', { color: 0x46616b, roughness: 0.7 });
+    const flowers = new T.InstancedMesh(geo('flower', () => new T.IcosahedronGeometry(0.09, 0)),
+      mat('flower', { color: 0xf5b4aa, roughness: 0.9 }), 24);
+    const dummy = new T.Object3D(); let count = 0;
+    [[-5.2, 3.9], [5.2, 3.9]].forEach(([x, z]) => {
+      mesh(box(1.6, 0.48, 0.55), wood, x, 0.24, z);
+      mesh(box(1.45, 0.05, 0.43), mat('lifeSoil', { color: 0x3e3825, roughness: 1 }), x, 0.49, z);
+      for (let i = 0; i < 12; i++) {
+        const xx = x - 0.64 + (i % 6) * 0.25, zz = z + (i < 6 ? -0.13 : 0.13);
+        mesh(cyl(0.012, 0.012, 0.25, 5), mat('lifeStem', { color: 0x4e8241, roughness: 1 }), xx, 0.6, zz);
+        dummy.position.set(xx, 0.76 + i % 3 * 0.025, zz); dummy.updateMatrix(); flowers.setMatrixAt(count++, dummy.matrix);
+      }
+    });
+    scene.add(flowers);
+    [[6, -6], [-6, -6]].forEach(([x, z]) => {
+      mesh(cyl(0.62, 0.62, 0.07, 16), wood, x, 0.8, z);
+      mesh(cyl(0.08, 0.22, 0.77, 8), metal, x, 0.385, z);
+      [-1, 1].forEach((s) => mesh(cyl(0.24, 0.2, 0.46, 10), metal, x + s * 0.96, 0.23, z));
+      mesh(cyl(0.06, 0.045, 0.13, 10), mat('lifeCup', { color: 0xeee4cb, roughness: 0.8 }), x + 0.18, 0.9, z);
+    });
+    const sign = new T.Group(); sign.position.set(-3.8, 0, 5.6); scene.add(sign);
+    mesh(cyl(0.055, 0.07, 2.2, 8), metal, 0, 1.1, 0, sign);
+    const signMap = tex('campusDirections', 512, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#244a45'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#fff7de'; ctx.textAlign = 'center'; ctx.font = `600 37px ${FONT}`;
+      ['图书馆 ↑   食堂 ↓', '宿舍 ←   教学楼 →', '打印店 ↙   中庭休憩区'].forEach((s, i) => ctx.fillText(s, w / 2, 58 + i * 72));
+    });
+    const board = mesh(geo('plane1'), mat('lifeSign', { map: signMap, side: T.DoubleSide, roughness: 0.8 }), 0, 1.8, 0, sign);
+    board.scale.set(1.65, 0.825, 1);
+    campusCat = new T.Group(); campusCat.position.set(6.5, 0.015, 8.0); scene.add(campusCat);
+    const fur = mat('catFur', { color: 0xc88e51, roughness: 1 });
+    mesh(geo('catBody', () => new T.SphereGeometry(0.2, 12, 8)), fur, 0, 0.24, 0, campusCat).scale.set(0.85, 1, 1.6);
+    mesh(geo('catHead', () => new T.SphereGeometry(0.145, 12, 8)), fur, 0, 0.44, 0.24, campusCat);
+    [-1, 1].forEach((s) => {
+      mesh(geo('catEar', () => new T.ConeGeometry(0.067, 0.14, 4)), fur, s * 0.09, 0.57, 0.23, campusCat);
+      mesh(box(0.025, 0.035, 0.015), mat('catEye', { color: 0x20362b }, 'basic'), s * 0.06, 0.45, 0.372, campusCat);
+      [-0.16, 0.14].forEach((z) => mesh(cyl(0.045, 0.05, 0.17, 6), fur, s * 0.12, 0.1, z, campusCat));
+    });
+    mesh(cyl(0.025, 0.04, 0.45, 8), fur, 0, 0.31, -0.39, campusCat).rotation.x = -0.65;
+    // 四条独立短步道处于内环空地；夜里只保留一位散步同学。
+    [[-4.8, -8, 1.3, 0], [4.8, -8, 1.3, 0], [-6, 0, 0, 2.3], [7.0, 0, 0, 2.5]].forEach((route, i) => {
+      const w = standingPerson({ color: ['#88aabd', '#d3aa8d', '#9cad8a', '#b6a2bf'][i], outfit: 'student' }, i + 8);
+      w.route = route; walkers.push(w);
+    });
+  }
+  function animatePeople(dt) {
+    npcs.forEach((n) => {
+      n.body.position.y = 0.86 + Math.sin(elapsed * 1.8 + n.seed) * 0.008;
+      n.head.rotation.y = Math.sin(elapsed * 0.55 + n.seed) * 0.13;
+    });
+    walkers.forEach((w, i) => {
+      w.g.visible = skyIdx !== 2 || i === 0;
+      if (!w.g.visible) return;
+      const r = w.route, t = elapsed * 0.35 + i * 1.9, s = Math.sin(t);
+      const x = r[0] + r[2] * s, z = r[1] + r[3] * s;
+      if (!blocked(x, z)) w.g.position.set(x, 0.015, z);
+      w.g.rotation.y = Math.atan2(r[2] * Math.cos(t), r[3] * Math.cos(t));
+      w.legs.forEach((leg, k) => { leg.rotation.x = Math.sin(elapsed * 5 + k * Math.PI) * 0.24 * Math.abs(Math.cos(t)); });
+      w.arms.forEach((arm, k) => { arm.rotation.x = -w.legs[k].rotation.x; });
+      w.body.position.y = 0.86 + Math.sin(elapsed * 10) * 0.009;
+    });
+    if (campusCat) campusCat.rotation.y = -0.5 + Math.sin(elapsed * 0.2) * 0.08;
+    if (clouds && clouds.visible) clouds.rotation.y += dt * 0.0007;
   }
 
   /* ---------- 目标标记 ---------- */
@@ -1213,6 +1575,18 @@ FZ.World = (function () {
     markerLabel.renderOrder = 10;
     marker.add(markerLabel);
     marker.visible = false;
+    const arrow = new T.Shape();
+    arrow.moveTo(0, 0.48); arrow.lineTo(0.48, -0.2); arrow.lineTo(0.22, -0.2);
+    arrow.lineTo(0, 0.1); arrow.lineTo(-0.22, -0.2); arrow.lineTo(-0.48, -0.2); arrow.closePath();
+    const geometry = new T.ShapeGeometry(arrow);
+    geometry.rotateX(-Math.PI / 2);
+    routeArrows = new T.InstancedMesh(geometry, new T.MeshBasicMaterial({
+      color: 0xffcc55, transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false
+    }), 32);
+    routeArrows.instanceMatrix.setUsage(T.DynamicDrawUsage);
+    routeArrows.frustumCulled = false;
+    routeArrows.count = 0; routeArrows.visible = false;
+    scene.add(routeArrows);
   }
   function labelTexture(text, sub) {
     const c = document.createElement('canvas'); c.width = 512; c.height = 128;
@@ -1229,6 +1603,47 @@ FZ.World = (function () {
   }
 
   /* ---------- 尘埃 ---------- */
+  function batchStaticMeshes() {
+    const moving = new Set([marker, clouds, sunDisc, moonDisc, moonSprite, campusCat, copierBar, clockHand,
+      ...npcs.map((n) => n.g), ...walkers.map((n) => n.g), ...figures.map((n) => n.g),
+      ...courseStacks.map((s) => s.group)]);
+    const groups = new Map();
+    scene.updateMatrixWorld(true);
+    scene.traverse((o) => {
+      if (!o.isMesh || o.isInstancedMesh || o.children.length || Array.isArray(o.material) || o.material.transparent) return;
+      for (let p = o; p; p = p.parent) { if (moving.has(p) || !p.visible) return; }
+      if (o.matrixWorld.determinant() <= 0) return;
+      const pos = new T.Vector3().setFromMatrixPosition(o.matrixWorld);
+      const key = [o.geometry.uuid, o.material.uuid, o.castShadow, o.receiveShadow, o.renderOrder,
+        Math.floor(pos.x / 16), Math.floor(pos.z / 16)].join('|');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(o);
+    });
+    groups.forEach((objects) => {
+      if (objects.length < 4) return;
+      const first = objects[0], bounds = new T.Box3();
+      objects.forEach((o) => {
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        bounds.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
+      });
+      const geometry = first.geometry.clone();
+      geometry.boundingSphere = bounds.getBoundingSphere(new T.Sphere());
+      const batch = new T.InstancedMesh(geometry, first.material, objects.length);
+      batch.castShadow = first.castShadow; batch.receiveShadow = first.receiveShadow;
+      batch.renderOrder = first.renderOrder; batch.frustumCulled = true;
+      objects.forEach((o, i) => {
+        batch.setMatrixAt(i, o.matrixWorld);
+        // 射线检测保留原物件的世界矩阵，渲染只使用合批后的实例。
+        o.matrixAutoUpdate = false;
+        o.removeFromParent();
+      });
+      batch.instanceMatrix.needsUpdate = true;
+      batch.matrixAutoUpdate = false;
+      scene.add(batch);
+      batches.meshes += objects.length; batches.groups++;
+    });
+  }
+
   function buildDust() {
     const n = mobile ? 260 : 620;
     const pos = new Float32Array(n * 3), seed = new Float32Array(n);
@@ -1252,22 +1667,18 @@ FZ.World = (function () {
   /* ---------- 后期 ---------- */
   const GRADE_SHADER = {
     uniforms: {
-      tDiffuse: { value: null }, uTime: { value: 0 }, uVig: { value: 0.55 },
-      uGrain: { value: 0.035 }, uAberr: { value: 0.9 }, uSat: { value: 1.06 },
+      tDiffuse: { value: null }, uTime: { value: 0 }, uVig: { value: 0.22 },
+      uGrain: { value: 0.004 }, uSat: { value: 1.02 },
       uExposure: { value: 1.1 }, uLift: { value: 0.02 }, uFlash: { value: 0 }, uFlashCol: { value: new T.Color(0xffffff) }
     },
     vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
     fragmentShader: [
-      'uniform sampler2D tDiffuse; uniform float uTime,uVig,uGrain,uAberr,uSat,uExposure,uLift,uFlash;',
+      'uniform sampler2D tDiffuse; uniform float uTime,uVig,uGrain,uSat,uExposure,uLift,uFlash;',
       'uniform vec3 uFlashCol; varying vec2 vUv;',
       'vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }',
       'void main(){',
       ' vec2 d = vUv-0.5; float r2 = dot(d,d);',
-      ' vec2 off = d*uAberr*r2*0.02;',
-      ' vec3 c;',
-      ' c.r = texture2D(tDiffuse, vUv+off).r;',
-      ' c.g = texture2D(tDiffuse, vUv).g;',
-      ' c.b = texture2D(tDiffuse, vUv-off).b;',
+      ' vec3 c = texture2D(tDiffuse, vUv).rgb;',
       ' c *= uExposure;',
       ' c = max(c - uLift, 0.0);',
       ' c = aces(c);',
@@ -1285,12 +1696,12 @@ FZ.World = (function () {
 
   function buildComposer(w, h) {
     const rt = new T.WebGLRenderTarget(w, h, {
-      type: T.HalfFloatType, minFilter: T.LinearFilter, magFilter: T.LinearFilter,
-      samples: quality === 'high' && !mobile ? 4 : 0
+      type: T.HalfFloatType, minFilter: T.LinearFilter, magFilter: T.LinearFilter
     });
+    rt.samples = renderer.capabilities.isWebGL2 ? (quality === 'high' ? 4 : quality === 'mid' ? 2 : 0) : 0;
     composer = new T.EffectComposer(renderer, rt);
     composer.addPass(new T.RenderPass(scene, camera));
-    bloom = new T.UnrealBloomPass(new T.Vector2(w, h), 0.72, 0.62, 0.7);
+    bloom = new T.UnrealBloomPass(new T.Vector2(w, h), 0.28, 0.3, 1.0);
     composer.addPass(bloom);
     gradePass = new T.ShaderPass(GRADE_SHADER);
     gradePass.renderToScreen = true;
@@ -1310,15 +1721,16 @@ FZ.World = (function () {
     quality = mobile ? (mem <= 3 ? 'low' : 'mid') : 'high';
 
     try {
-      renderer = new T.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false });
+      renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', alpha: false, stencil: false });
     } catch (e) { return false; }
     renderer.setSize(host.clientWidth || window.innerWidth, host.clientHeight || window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === 'high' ? 1.75 : quality === 'mid' ? 1.35 : 1));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : quality === 'mid' ? 1.5 : 1));
     renderer.outputEncoding = T.LinearEncoding;
     renderer.toneMapping = T.NoToneMapping;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = false;
+    renderer.info.autoReset = false;
     host.appendChild(renderer.domElement);
     renderer.domElement.id = 'world-canvas';
 
@@ -1348,8 +1760,15 @@ FZ.World = (function () {
     buildClassroom();
     buildCanteen();
     buildPrint();
+    buildCampusCorners();
+    buildCampusLife();
+    cacheCampusObstacles();
+    buildNPCs();
     buildMarker();
     buildDust();
+    batchStaticMeshes();
+    ['compass-needle', 'roam-direction', 'roam-dist', 'npc-nearby', 'btn-talk', 'campus-map',
+      'btn-map', 'minimap', 'nav-arrival'].forEach((id) => { hud[id] = document.getElementById(id); });
 
     const w = host.clientWidth || window.innerWidth, h = host.clientHeight || window.innerHeight;
     camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -1361,6 +1780,7 @@ FZ.World = (function () {
     renderer.shadowMap.needsUpdate = true;
     bindInput(host);
     ok = true;
+    setQuality(quality);
     setPhase('title');
     start();
     return true;
@@ -1376,16 +1796,32 @@ FZ.World = (function () {
     skyMat.uniforms.bot.value.setHex(s.bot);
     scene.fog.color.setHex(s.fog);
     scene.fog.density = s.fogD;
+    const night = idx === 2;
+    document.body.dataset.timeOfDay = night ? 'night' : 'day';
+    const timeLabel = document.getElementById('world-time-label');
+    if (timeLabel) timeLabel.textContent = ['清晨 · 白天', '午后 · 白天', '深夜 · 夜晚'][idx];
     moon.intensity = s.moon; moon.color.setHex(s.moonCol);
+    moon.position.set(night ? -34 : idx === 0 ? 42 : -26, night ? 44 : idx === 0 ? 30 : 60, night ? -26 : -38);
+    moon.shadow.needsUpdate = true;
     hemi.intensity = s.hemi;
-    hemi.color.setHex(idx === 1 ? 0x9fb0cc : 0x2a3a66);
-    stars.material.uniforms.uOpacity.value = s.star;
-    moonSprite.material.opacity = idx === 1 ? 0.15 : 0.9;
+    hemi.color.setHex(night ? 0x91b0dd : 0xd1e8ff); hemi.groundColor.setHex(night ? 0x263045 : 0x807b62);
+    skyMat.uniforms.glow.value.setHex(night ? 0x203050 : 0x8ca4b1);
+    stars.material.uniforms.uOpacity.value = s.star; stars.visible = night;
+    moonSprite.visible = moonDisc.visible = night; sunDisc.visible = clouds.visible = !night;
+    sunDisc.position.copy(moon.position).normalize().multiplyScalar(180); sunDisc.lookAt(0, 0, 0);
+    campusLights.forEach((f) => { f.light.intensity = night ? f.night : f.day; });
+    const city = matCache.get('city');
+    if (city) { city.color.setHex(night ? 0x56627d : 0xa7bac9); city.emissiveIntensity = night ? 0.85 : 0.04; }
+    const glass = matCache.get('glass');
+    if (glass) { glass.emissive.setHex(night ? 0xffd39a : 0x88bbdd); glass.emissiveIntensity = night ? 0.9 : 0.15; glass.opacity = night ? 0.28 : 0.16; }
+    ['pool', 'spill', 'lampCone'].forEach((key) => {
+      const m = matCache.get(key); if (m) m.opacity = night ? (key === 'lampCone' ? 0.025 : 0.24) : (key === 'lampCone' ? 0 : 0.035);
+    });
     gradePass.uniforms.uExposure.value = s.exposure;
     gradePass.uniforms.uLift.value = s.lift;
     stdMats.forEach((m) => { m.envMapIntensity = s.env; });
-    gradePass.uniforms.uSat.value = idx === 1 ? 0.9 : 1.08;
-    lampFlicker.forEach((f) => { f.lampScale = f.ceil ? (idx === 2 ? 0.05 : idx === 0 ? 0.6 : 1) : s.lamp; });
+    applyClarity();
+    lampFlicker.forEach((f) => { f.lampScale = f.ceil || f.ceilPanel ? (night ? 0.75 : 0.4) : s.lamp; });
     dormLamp.intensity = 3.4 * s.lamp;
     libLamp.intensity = 2.0 * s.lamp;
     if (moonPool) moonPool.opacity = idx === 2 ? 0.3 : idx === 0 ? 0.14 : 0.04;
@@ -1401,41 +1837,142 @@ FZ.World = (function () {
     renderer.shadowMap.needsUpdate = true;
   }
 
+  /* ---------- 交互锁与导航状态：剧情 targetKey 永不被 NPC 覆盖 ---------- */
+  function inputBlocked() {
+    return interactionLocked || !!document.querySelector('dialog[open]');
+  }
+  function clearControls() {
+    for (const k in keys) delete keys[k];
+    const cv = renderer && renderer.domElement, st = document.getElementById('stick');
+    if (cv && look.id >= 0 && cv.hasPointerCapture(look.id)) cv.releasePointerCapture(look.id);
+    if (st && stick.id >= 0 && st.hasPointerCapture(stick.id)) st.releasePointerCapture(stick.id);
+    stick.on = look.on = false; stick.id = look.id = -1; stick.x = stick.y = 0;
+    P.moving = 0; P.tYaw = P.yaw; P.tPitch = P.pitch;
+    const knob = document.getElementById('stick-knob');
+    if (knob) knob.style.transform = 'translate(0,0)';
+  }
+  function syncNavigationUI() {
+    const n = npcTarget && npcs.find((p) => p.data.id === npcTarget);
+    const L = LOC[n ? n.scene : targetKey];
+    if (marker) {
+      marker.position.set(L.stand[0], floorAt(sceneKey(n ? n.scene : targetKey)), L.stand[1]);
+      markerLabel.material.map = n ? n.markerMap : storyMarkerMap;
+      markerLabel.material.needsUpdate = true;
+      marker.visible = phase === 'roam' && !interactionLocked;
+    }
+    const place = document.getElementById('roam-place');
+    if (place) place.textContent = L.name;
+    const b = document.getElementById('btn-go');
+    if (b) b.classList.toggle('walking', !!autoPath);
+    const status = document.getElementById('npc-travel-status');
+    if (status) { status.hidden = !n; status.textContent = n ? '正在寻找 ' + n.data.name + ' · ' + L.name : ''; }
+    updateRouteGuide();
+  }
+  function cancelNavigation() {
+    autoPath = null; npcTarget = null; jam = 0;
+    syncNavigationUI();
+  }
+  function focusNPC(id) {
+    if (conversation && conversation.npc.data.id === id) return true;
+    if (conversation) {
+      conversation.npc.g.rotation.y = conversation.rotation;
+      P.yaw = P.tYaw = conversation.yaw;
+      P.pitch = P.tPitch = conversation.pitch;
+      conversation = null;
+    }
+    if (!id) return false;
+    const n = npcs.find((person) => person.data.id === id);
+    if (!n || !npcStatus().some((person) => person.id === id && person.nearby)) return false;
+    conversation = { npc: n, rotation: n.g.rotation.y, yaw: P.yaw, pitch: P.pitch };
+    const point = playerPoint();
+    n.g.rotation.y = Math.atan2(point[0] - n.g.position.x, point[1] - n.g.position.z);
+    npcs.forEach((person) => { person.label.visible = false; });
+    return true;
+  }
+  function setInteractionLocked(value) {
+    interactionLocked = !!value;
+    if (!interactionLocked) focusNPC(null);
+    clearControls();
+    if (interactionLocked) cancelNavigation();
+    else syncNavigationUI();
+    if (ok) updateNpcHud();
+  }
+  function goToNPC(id) {
+    if (!ok || !['roam', 'event'].includes(phase) || inputBlocked()) return false;
+    const n = npcs.find((p) => p.data.id === id && p.placed);
+    if (!n) return false;
+    if (phase === 'event') { const L = LOC[targetKey]; P.x = L.stand[0]; P.z = L.stand[1]; }
+    clearControls();
+    npcTarget = id; storyArrivalHeld = true; jam = 0;
+    autoPath = buildPath(n.scene);
+    setPhase('roam'); syncNavigationUI(); updateNpcHud();
+    return true;
+  }
+  function arriveNpc() {
+    const n = npcs.find((p) => p.data.id === npcTarget);
+    if (!n) { cancelNavigation(); return; }
+    const id = n.data.id, L = LOC[n.scene];
+    P.x = L.stand[0]; P.z = L.stand[1];
+    const dx = n.g.position.x - P.x, dz = n.g.position.z - P.z;
+    P.yaw = P.tYaw = cam.yaw = Math.atan2(-dx, -dz);
+    P.pitch = P.tPitch = cam.pitch = Math.atan2(1.5 - EYE, Math.hypot(dx, dz));
+    cam.pos.set(P.x, EYE + floorAt(n.scene), P.z);
+    camera.position.copy(cam.pos); camera.rotation.set(cam.pitch, cam.yaw, 0);
+    storyArrivalHeld = true;
+    // 清导航、锁输入但继续渲染。保留 arrived，返回剧情必须由 goTo 重新武装。
+    setInteractionLocked(true);
+    updateNpcHud();
+    showArrival('已找到 ' + n.data.name + ' · ' + L.name);
+    if (typeof npcArriveCb === 'function') {
+      try { npcArriveCb(id); } catch (error) { setInteractionLocked(false); console.error('NPC arrival callback failed', error); }
+    } else setInteractionLocked(false);
+  }
+
   /* ---------- 输入 ---------- */
   function bindInput(host) {
     const cv = renderer.domElement;
     cv.style.touchAction = 'none';
+    hud['btn-map'].addEventListener('click', () => {
+      const collapsed = hud['campus-map'].classList.toggle('is-collapsed');
+      hud['btn-map'].setAttribute('aria-expanded', String(!collapsed));
+      if (!collapsed) updateRouteGuide();
+    });
 
     cv.addEventListener('pointerdown', (e) => {
-      if (look.on) return;
+      if (inputBlocked() || look.on) return;
       look.on = true; look.id = e.pointerId; look.px = e.clientX; look.py = e.clientY;
       cv.setPointerCapture(e.pointerId);
     });
     cv.addEventListener('pointermove', (e) => {
-      if (!look.on || e.pointerId !== look.id) return;
+      if (inputBlocked() || !look.on || e.pointerId !== look.id) return;
       const dx = e.clientX - look.px, dy = e.clientY - look.py;
       look.px = e.clientX; look.py = e.clientY;
-      const k = phase === 'roam' ? 0.0034 : 0.0022;
+      const sensitivity = e.pointerType === 'touch' ? 1.8 / Math.max(320, Math.min(innerWidth, innerHeight)) : 0.0034;
+      const k = phase === 'roam' ? sensitivity : sensitivity * 0.65;
       P.tYaw -= dx * k;
       P.tPitch = Math.max(-1.15, Math.min(1.0, P.tPitch - dy * k * 0.85));
     });
     const endLook = (e) => { if (e.pointerId === look.id) { look.on = false; look.id = -1; } };
     cv.addEventListener('pointerup', endLook);
     cv.addEventListener('pointercancel', endLook);
+    cv.addEventListener('lostpointercapture', endLook);
 
     const st = document.getElementById('stick');
     const knob = document.getElementById('stick-knob');
     if (st && knob) {
       const setStick = (e) => {
+        if (inputBlocked() || phase !== 'roam') return;
         const r = st.getBoundingClientRect();
         let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
         let dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
-        const m = Math.hypot(dx, dy);
-        if (m > 1) { dx /= m; dy /= m; }
+        const m = Math.hypot(dx, dy), strength = Math.max(0, Math.min(1, (m - 0.12) / 0.88));
+        if (m > 0) { dx = dx / m * strength; dy = dy / m * strength; }
         stick.x = dx; stick.y = dy;
-        knob.style.transform = `translate(${dx * 34}px, ${dy * 34}px)`;
+        const travel = (r.width - knob.offsetWidth) / 2;
+        knob.style.transform = `translate(${dx * travel}px, ${dy * travel}px)`;
       };
       st.addEventListener('pointerdown', (e) => {
+        if (inputBlocked() || phase !== 'roam' || stick.on) return;
         stick.on = true; stick.id = e.pointerId; st.setPointerCapture(e.pointerId);
         setStick(e); e.preventDefault();
       });
@@ -1447,17 +1984,18 @@ FZ.World = (function () {
       };
       st.addEventListener('pointerup', end);
       st.addEventListener('pointercancel', end);
+      st.addEventListener('lostpointercapture', end);
     }
 
     window.addEventListener('keydown', (e) => {
       const tag = e.target && e.target.tagName;
-      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (inputBlocked() || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
       keys[String(e.key).toLowerCase()] = true;
       if (phase === 'roam' && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(String(e.key).toLowerCase())) e.preventDefault();
     });
-    window.addEventListener('keyup', (e) => { keys[String(e.key).toLowerCase()] = false; });
-    window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; stick.on = false; stick.x = stick.y = 0; });
-    document.addEventListener('visibilitychange', () => { paused = document.hidden; });
+    window.addEventListener('keyup', (e) => { delete keys[String(e.key).toLowerCase()]; });
+    window.addEventListener('blur', clearControls);
+    document.addEventListener('visibilitychange', () => { paused = document.hidden; clearControls(); });
     window.addEventListener('resize', resize);
   }
 
@@ -1493,12 +2031,14 @@ FZ.World = (function () {
     return [x / m * RING, z / m * RING];
   }
   function buildPath(toKey) {
+    toKey = sceneKey(toKey);
     const to = LOC[toKey] || LOC.library;
     const pts = [];
-    const fromKey = locAt(P.x, P.z);
+    const fromKey = sceneKey(locAt(P.x, P.z));
     let cx = P.x, cz = P.z;
     if (fromKey && fromKey !== toKey) {
-      const d = LOC[fromKey].door;
+      const from = LOC[fromKey], d = from.door;
+      if (from.approach) pts.push(...from.approach.slice().reverse().map((p) => p.slice()));
       pts.push([d[0], d[1]]); cx = d[0]; cz = d[1];
     }
     if (fromKey !== toKey || Math.hypot(cx - to.stand[0], cz - to.stand[1]) > 6) {
@@ -1513,36 +2053,136 @@ FZ.World = (function () {
         pts.push([Math.sin(a) * RING, Math.cos(a) * RING]);
       }
       pts.push([to.door[0], to.door[1]]);
+      if (to.approach) pts.push(...to.approach.map((p) => p.slice()));
     }
     pts.push([to.stand[0], to.stand[1]]);
     return pts;
   }
 
+  function updateMinimap(points, target) {
+    const canvas = hud.minimap;
+    if (!canvas || !canvas.clientWidth || hud['campus-map'].classList.contains('is-collapsed') || inputBlocked()) return;
+    const w = canvas.clientWidth, h = canvas.clientHeight, ratio = Math.min(devicePixelRatio || 1, 2);
+    const size = `${w},${h},${ratio}`;
+    const xy = (x, z) => [(x + 36) * w / 72, (z + 32) * h / 64];
+    if (size !== mapSize) {
+      mapSize = size;
+      canvas.width = Math.round(w * ratio); canvas.height = Math.round(h * ratio);
+      mapBase = document.createElement('canvas'); mapBase.width = canvas.width; mapBase.height = canvas.height;
+      const g = mapBase.getContext('2d'); g.scale(ratio, ratio);
+      g.fillStyle = '#101e2b'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#45575d'; g.lineWidth = 7;
+      g.beginPath(); g.ellipse(...xy(0, 0), 11 * w / 72, 11 * h / 64, 0, 0, Math.PI * 2); g.stroke();
+      Object.entries(LOC).forEach(([key, L]) => {
+        if (key === 'online') return;
+        if (L.rect) {
+          const [x, z, rw, rh] = L.rect, [left, top] = xy(x - rw / 2, z - rh / 2);
+          g.fillStyle = L.outdoor ? '#314e42' : '#2a3c51'; g.strokeStyle = '#657d96'; g.lineWidth = 1;
+          g.fillRect(left, top, rw * w / 72, rh * h / 64); g.strokeRect(left, top, rw * w / 72, rh * h / 64);
+        }
+        const p = L.rect ? xy(L.rect[0], L.rect[1]) : xy(0, 1);
+        const label = w < 170 ? (L.short || L.name) : L.name;
+        g.font = `600 ${w < 170 ? 9 : 11}px ${FONT}`;
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.lineWidth = 3; g.strokeStyle = 'rgba(9,17,27,0.82)'; g.strokeText(label, p[0], p[1]);
+        g.fillStyle = '#e0e9f4'; g.fillText(label, p[0], p[1]);
+      });
+      g.fillStyle = '#9aaec1'; g.font = `600 10px ${FONT}`; g.fillText('北 ↑', w - 19, 10);
+    }
+    const g = canvas.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(mapBase, 0, 0);
+    g.setTransform(ratio, 0, 0, ratio, 0, 0);
+    g.strokeStyle = '#ffca55'; g.lineWidth = 2; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(...xy(P.x, P.z)); points.forEach((p) => g.lineTo(...xy(...p))); g.stroke();
+    const goal = xy(...LOC[target].stand);
+    g.fillStyle = '#ffca55'; g.strokeStyle = '#0d1726'; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(...goal, 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.save(); g.translate(...xy(P.x, P.z)); g.rotate(-cam.yaw);
+    g.fillStyle = '#54dcff'; g.strokeStyle = '#0d1726'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(0, -7); g.lineTo(5, 5); g.lineTo(0, 3); g.lineTo(-5, 5); g.closePath(); g.fill(); g.stroke(); g.restore();
+    const description = `校园小地图，蓝色为你的位置和朝向，金色路线通往${LOC[target].name}`;
+    if (canvas.getAttribute('aria-label') !== description) canvas.setAttribute('aria-label', description);
+  }
+
+  function showArrival(text) {
+    FZ.Audio.play('arrival');
+    syncEnvironment();
+    clearTimeout(arrivalTimer);
+    hud['nav-arrival'].textContent = text;
+    hud['nav-arrival'].classList.add('on');
+    arrivalTimer = setTimeout(() => hud['nav-arrival'].classList.remove('on'), 3200);
+  }
+
+  function updateRouteGuide() {
+    if (!routeArrows) return;
+    routeArrows.visible = phase === 'roam' && !inputBlocked();
+    if (!routeArrows.visible) { routeArrows.count = 0; guideCache = null; return; }
+    const n = npcTarget && npcs.find((person) => person.data.id === npcTarget);
+    const target = n ? n.scene : targetKey;
+    const routeKey = `${target}|${autoPath ? autoPath.length + ':' + autoPath[0] : 'manual'}`;
+    if (!guideCache || guideCache.key !== routeKey || Math.hypot(P.x - guideCache.x, P.z - guideCache.z) > 0.05) {
+      const points = (autoPath || buildPath(target)).filter((p) => Math.hypot(p[0] - P.x, p[1] - P.z) > 0.35);
+      let from = [P.x, P.z], spacing = 1.1, count = 0;
+      for (const to of points) {
+        const dx = to[0] - from[0], dz = to[1] - from[1], length = Math.hypot(dx, dz);
+        if (length < 0.001) continue;
+        let at = spacing;
+        for (; at < length && count < 32; at += 1.8) {
+          const x = from[0] + dx * at / length, z = from[1] + dz * at / length;
+          routeTransform.position.set(x, floorAt(areaAt(x, z)) + 0.075, z);
+          routeTransform.rotation.set(0, Math.atan2(-dx, -dz), 0);
+          routeTransform.updateMatrix();
+          routeArrows.setMatrixAt(count++, routeTransform.matrix);
+        }
+        if (count === 32) break;
+        spacing = at - length; from = to;
+      }
+      routeArrows.count = count; routeArrows.instanceMatrix.needsUpdate = true;
+      guideCache = { key: routeKey, x: P.x, z: P.z, points };
+    }
+    const points = guideCache.points, next = points[0] || LOC[target].stand;
+    const yaw = Math.atan2(P.x - next[0], P.z - next[1]);
+    const bearing = Math.atan2(Math.sin(cam.yaw - yaw), Math.cos(cam.yaw - yaw));
+    let from = [P.x, P.z], distance = 0;
+    points.forEach((p) => { distance += Math.hypot(p[0] - from[0], p[1] - from[1]); from = p; });
+    routeArrows.userData = { target, next: next.slice(), bearing, distance };
+    hud['compass-needle'].style.transform = `rotate(${bearing}rad)`;
+    const direction = Math.abs(bearing) > 2.4 ? '向后转，沿路走' :
+      bearing > 0.45 ? '向右转，沿路走' : bearing < -0.45 ? '向左转，沿路走' : '沿箭头向前走';
+    if (hud['roam-direction'].textContent !== direction) hud['roam-direction'].textContent = direction;
+    const remaining = distance < 1.4 ? '即将到达' : Math.ceil(distance) + ' m';
+    if (hud['roam-dist'].textContent !== remaining) hud['roam-dist'].textContent = remaining;
+    updateMinimap(points, target);
+  }
+
   function goTo() {
-    if (!ok || phase !== 'roam') return;
-    jam = 0;
+    if (!ok || !['roam', 'event'].includes(phase) || inputBlocked()) return;
+    cancelNavigation(); clearControls();
+    arrived = false; storyArrivalHeld = false;
     autoPath = buildPath(targetKey);
-    const b = document.getElementById('btn-go');
-    if (b) b.classList.add('walking');
+    setPhase('roam'); syncNavigationUI();
   }
 
   function arrive() {
-    if (arrived) return;
+    if (arrived || npcTarget || inputBlocked()) return;
     arrived = true;
     autoPath = null;
     const L = LOC[targetKey];
     P.tYaw = L.yaw; P.tPitch = L.pitch;
     setPhase('event');
+    showArrival('已到达 ' + L.name + ' · 开始本时段事件');
     if (arriveCb) arriveCb();
   }
 
   /* ---------- 相位 ---------- */
   function setPhase(p) {
     if (!ok) return;
+    focusNPC(null);
     phase = p;
+    clearTimeout(arrivalTimer); hud['nav-arrival'].classList.remove('on');
+    if (p !== 'roam') { interactionLocked = false; clearControls(); cancelNavigation(); }
     document.body.dataset.wphase = p;
     const roaming = p === 'roam';
-    marker.visible = roaming;
+    marker.visible = roaming && !interactionLocked;
     const el = document.getElementById('roam-hud');
     if (el) el.classList.toggle('on', roaming);
     const st = document.getElementById('stick');
@@ -1563,14 +2203,18 @@ FZ.World = (function () {
     if (p === 'result') { applySky(0); }
     if (p === 'dayend') { dormLamp.intensity = 0.7; }
     else if (skyCur) dormLamp.intensity = 2.6 * skyCur.lamp;
+    syncEnvironment();
+    updateRouteGuide();
   }
 
   function beginSlot(o) {
     if (!ok) return;
+    interactionLocked = false; clearControls(); cancelNavigation();
     targetKey = LOC[o.scene] ? o.scene : 'library';
-    arrived = false;
+    arrived = false; storyArrivalHeld = false;
     dayNo = o.day; slotNo = o.slot;
     applySky(Math.min(2, o.slot));
+    placeNPCs(o.slot);
     if (posterTex) {
       const nt = texPoster(o.day);
       const pm = matCache.get('posterM');
@@ -1578,8 +2222,9 @@ FZ.World = (function () {
     }
     const L = LOC[targetKey];
     marker.position.set(L.stand[0], 0, L.stand[1]);
-    if (markerLabel.material.map) markerLabel.material.map.dispose();
-    markerLabel.material.map = labelTexture(L.name, o.label || '这个时段的事件在这里');
+    if (storyMarkerMap) storyMarkerMap.dispose();
+    storyMarkerMap = labelTexture(L.name, o.label || '这个时段的事件在这里');
+    markerLabel.material.map = storyMarkerMap;
     markerLabel.material.needsUpdate = true;
     marker.visible = true;
     setPhase('roam');
@@ -1610,44 +2255,52 @@ FZ.World = (function () {
     });
   }
 
+  function applyClarity() {
+    const stress = Math.max(0, Math.min(1, (30 - stats.m) / 30));
+    const tired = Math.max(0, Math.min(1, (30 - stats.s) / 30));
+    gradePass.uniforms.uVig.value = 0.22 + stress * 0.07 + tired * 0.04;
+    gradePass.uniforms.uGrain.value = quality === 'low' ? 0 : 0.004 + stress * 0.003;
+    gradePass.uniforms.uSat.value = 1.02 - stress * 0.06;
+    if (skyCur) scene.fog.density = skyCur.fogD;
+  }
   function setStats(st) {
     if (!ok || !st) return;
     stats = st;
-    const stress = Math.max(0, (30 - st.m) / 30);
-    const tired = Math.max(0, (30 - st.s) / 30);
-    gradePass.uniforms.uVig.value = 0.5 + stress * 0.35 + tired * 0.2;
-    gradePass.uniforms.uGrain.value = 0.03 + stress * 0.05;
-    gradePass.uniforms.uAberr.value = 0.7 + stress * 2.2;
-    gradePass.uniforms.uSat.value = (skyCur && skyCur === SKY[1] ? 0.9 : 1.08) - stress * 0.35;
-    if (skyCur) scene.fog.density = skyCur.fogD * (1 + stress * 0.5);
+    applyClarity();
   }
 
   function pulse(kind, color) {
     if (!ok) return;
-    const amt = kind === 'bad' ? 0.22 : kind === 'good' ? 0.1 : 0.06;
+    const amt = kind === 'bad' ? 0.07 : kind === 'good' ? 0.04 : 0.025;
     kickAmt = Math.max(kickAmt, amt);
     kick.set((Math.random() - 0.5) * amt, (Math.random() - 0.5) * amt, 0);
-    bloomBump = kind === 'bad' ? 0.5 : 0.34;
+    bloomBump = kind === 'bad' ? 0.04 : 0.02;
     if (kind === 'bad' || kind === 'good') {
-      flashAmt = kind === 'bad' ? 0.2 : 0.1;
+      flashAmt = kind === 'bad' ? 0.06 : 0.035;
       gradePass.uniforms.uFlashCol.value.set(color || (kind === 'bad' ? 0xff4d4d : 0xb6f03c));
     }
   }
 
   function setQuality(q) {
     if (!ok) return;
-    quality = q;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q === 'high' ? 1.75 : q === 'mid' ? 1.35 : 1));
-    bloom.strength = q === 'low' ? 0.5 : 0.72;
-    bloom.enabled = q !== 'low';
-    dust.visible = q !== 'low';
-    renderer.shadowMap.enabled = q !== 'low';
+    quality = ['high', 'mid', 'low'].includes(q) ? q : 'high';
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : quality === 'mid' ? 1.5 : 1));
+    bloom.strength = quality === 'high' ? 0.28 : 0.24; bloom.radius = 0.3; bloom.threshold = 1;
+    bloom.enabled = quality !== 'low';
+    const samples = renderer.capabilities.isWebGL2 ? (quality === 'high' ? 4 : quality === 'mid' ? 2 : 0) : 0;
+    [composer.renderTarget1, composer.renderTarget2].forEach((rt) => {
+      if (rt && rt.samples !== samples) { rt.samples = samples; rt.dispose(); }
+    });
+    applyClarity();
+    dust.visible = quality !== 'low';
+    renderer.shadowMap.enabled = quality !== 'low';
     renderer.shadowMap.needsUpdate = true;
     resize();
   }
 
   /* ---------- 每帧 ---------- */
   function movePlayer(dt, adt) {
+    if (inputBlocked()) { clearControls(); if (autoPath || npcTarget) cancelNavigation(); return; }
     let fx = 0, fz = 0;
     if (keys['w'] || keys['arrowup']) fz += 1;
     if (keys['s'] || keys['arrowdown']) fz -= 1;
@@ -1656,22 +2309,21 @@ FZ.World = (function () {
     if (stick.on) { fx += stick.x; fz -= stick.y; }
     const mag = Math.hypot(fx, fz);
     if (mag > 0.08) {
-      autoPath = null;
-      const b = document.getElementById('btn-go');
-      if (b) b.classList.remove('walking');
-      fx /= Math.max(1, mag); fz /= Math.max(1, mag);
+      if (autoPath || npcTarget) cancelNavigation();
+      fx /= mag; fz /= mag;
       const run = keys['shift'] ? 1.85 : 1;
       const sp = 3.5 * run * Math.min(1, mag);
       const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
-      const dx = (-sy * fz + cy * fx) * sp * dt;
-      const dz = (-cy * fz - sy * fx) * sp * dt;
-      stepMove(dx, dz);
-      P.moving = Math.min(1, P.moving + dt * 6);
-      P.bob += dt * sp * 2.1;
-      P.step = (P.step || 0) + dt * sp * 2.1;
+      const dx = (-sy * fz + cy * fx) * sp * adt;
+      const dz = (-cy * fz - sy * fx) * sp * adt;
+      const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.2));
+      for (let i = 0; i < steps; i++) stepMove(dx / steps, dz / steps);
+      P.moving = Math.min(1, P.moving + adt * 6);
+      P.bob += adt * sp * 2.1;
+      P.step = (P.step || 0) + adt * sp * 2.1;
       if (P.step > Math.PI) {
         P.step -= Math.PI;
-        if (FZ.Audio) FZ.Audio.play('step', { indoor: !!locAt(P.x, P.z), run: run > 1 });
+        if (FZ.Audio) FZ.Audio.play('step', { indoor: isIndoor(locAt(P.x, P.z)), surface: areaAt(P.x, P.z), run: run > 1 });
       }
     } else {
       P.moving = Math.max(0, P.moving - dt * 5);
@@ -1686,7 +2338,11 @@ FZ.World = (function () {
         const d = Math.hypot(dx, dz);
         if (d < 0.22) {
           autoPath.shift();
-          if (!autoPath.length) { autoPath = null; arrive(); }
+          if (!autoPath.length) {
+            autoPath = null;
+            if (npcTarget) arriveNpc(); else arrive();
+            return; // NPC 回调即便立即解锁，本 tick 也绝不触发剧情。
+          }
           continue;
         }
         const step = Math.min(budget, d, 0.25);
@@ -1699,9 +2355,12 @@ FZ.World = (function () {
           if (jam > 0.9) {
             jam = 0; autoPath.shift();
             if (!autoPath.length) {
-              const L = LOC[targetKey];
+              const n = npcTarget && npcs.find((p) => p.data.id === npcTarget);
+              const L = LOC[n ? n.scene : targetKey];
               P.x = L.stand[0]; P.z = L.stand[1];
-              autoPath = null; arrive();
+              autoPath = null;
+              if (npcTarget) arriveNpc(); else arrive();
+              return;
             }
             continue;
           }
@@ -1713,13 +2372,14 @@ FZ.World = (function () {
         P.step = (P.step || 0) + step * 2.0;
         if (P.step > Math.PI) {
           P.step -= Math.PI;
-          if (FZ.Audio) FZ.Audio.play('step', { indoor: !!locAt(P.x, P.z) });
+          if (FZ.Audio) FZ.Audio.play('step', { indoor: isIndoor(locAt(P.x, P.z)), surface: areaAt(P.x, P.z) });
         }
       }
     }
 
-    const L = LOC[targetKey];
-    if (!arrived && Math.hypot(P.x - L.stand[0], P.z - L.stand[1]) < 1.15) arrive();
+    const L = LOC[targetKey], distance = Math.hypot(P.x - L.stand[0], P.z - L.stand[1]);
+    if (!npcTarget && storyArrivalHeld && distance > 1.35) storyArrivalHeld = false;
+    if (!npcTarget && !storyArrivalHeld && !arrived && !inputBlocked() && phase === 'roam' && distance < 1.15) arrive();
   }
 
   function stepMove(dx, dz) {
@@ -1729,12 +2389,27 @@ FZ.World = (function () {
     if (!blocked(P.x, nz)) P.z = nz;
   }
 
+  const desiredCam = { pos: new T.Vector3(), yaw: 0, pitch: 0, k: 1 };
   function wantCam(dt) {
-    const w = { pos: new T.Vector3(), yaw: P.yaw, pitch: P.pitch, k: 1 - Math.exp(-dt * 4.2) };
+    const w = desiredCam;
+    w.yaw = P.yaw; w.pitch = P.pitch; w.k = 1 - Math.exp(-dt * 4.2);
+    if (conversation) {
+      const n = conversation.npc, point = playerPoint();
+      const dx = n.g.position.x - point[0], dz = n.g.position.z - point[1];
+      const eye = EYE + floorAt(n.scene), height = renderer.domElement.clientHeight;
+      const top = document.getElementById('campus-dialog').getBoundingClientRect().top;
+      const faceY = Math.max(48, top * 0.43);
+      w.pos.set(point[0], eye, point[1]);
+      w.yaw = Math.atan2(-dx, -dz);
+      w.pitch = Math.atan2(n.g.position.y + 1.55 - eye, Math.hypot(dx, dz)) -
+        Math.atan((1 - 2 * faceY / height) * Math.tan(T.MathUtils.degToRad(camera.fov / 2)));
+      return w;
+    }
+    if (inputBlocked()) { w.pos.copy(cam.pos); w.yaw = cam.yaw; w.pitch = cam.pitch; w.k = 1; return w; }
     if (phase === 'roam') {
       const bobY = Math.sin(P.bob) * 0.035 * P.moving;
       const bobX = Math.cos(P.bob * 0.5) * 0.022 * P.moving;
-      w.pos.set(P.x + bobX, EYE + bobY, P.z);
+      w.pos.set(P.x + bobX, EYE + floorAt(areaAt(P.x, P.z)) + bobY, P.z);
       w.yaw = P.yaw; w.pitch = P.pitch; w.k = 1;
     } else if (phase === 'event' || phase === 'exam') {
       const L = phase === 'exam' ? { stand: [18.6, -6.6], yaw: -Math.PI / 2 - 0.22, pitch: -0.13 } : LOC[targetKey];
@@ -1756,7 +2431,7 @@ FZ.World = (function () {
       titleT += dt;
       const t = Math.min(1, titleT / 26);
       const e = t * t * (3 - 2 * t);
-      const ax = 8 - e * 22, az = 17 - e * 15;
+      const ax = 8 - e * 22, az = 13 - e * 11;
       w.pos.set(ax + Math.sin(elapsed * 0.22) * 0.6, 2.1 + e * 0.3 + Math.sin(elapsed * 0.3) * 0.08, az);
       const tx = -26, tz = -3;
       w.yaw = Math.atan2(-(tx - w.pos.x), -(tz - w.pos.z));
@@ -1776,20 +2451,27 @@ FZ.World = (function () {
     if (phase === 'roam') movePlayer(dt, Math.min(0.3, raw));
 
     // 视角阻尼
-    const lk = phase === 'roam' ? 1 - Math.exp(-dt * 18) : 1 - Math.exp(-dt * 6);
-    P.yaw += Math.atan2(Math.sin(P.tYaw - P.yaw), Math.cos(P.tYaw - P.yaw)) * lk;
-    P.pitch += (P.tPitch - P.pitch) * lk;
+    const viewDt = Math.min(raw, 0.15);
+    const lk = 1 - Math.exp(-viewDt * (phase === 'roam' ? 18 : 6));
+    const locked = inputBlocked();
+    if (!locked) {
+      P.yaw += Math.atan2(Math.sin(P.tYaw - P.yaw), Math.cos(P.tYaw - P.yaw)) * lk;
+      P.pitch += (P.tPitch - P.pitch) * lk;
+    }
 
-    const w = wantCam(dt);
+    const w = wantCam(viewDt);
     cam.pos.lerp(w.pos, w.k);
     cam.yaw += Math.atan2(Math.sin(w.yaw - cam.yaw), Math.cos(w.yaw - cam.yaw)) * (phase === 'roam' ? 1 : w.k);
     cam.pitch += (w.pitch - cam.pitch) * (phase === 'roam' ? 1 : w.k);
 
     kickAmt *= Math.exp(-dt * 7);
     camera.position.copy(cam.pos);
-    camera.position.x += kick.x * kickAmt * 3;
-    camera.position.y += kick.y * kickAmt * 3 + (stats.s < 25 ? Math.sin(elapsed * 1.7) * 0.012 : 0);
-    camera.rotation.set(cam.pitch, cam.yaw, Math.sin(elapsed * 0.7) * 0.004 + (stats.m < 25 ? Math.sin(elapsed * 1.1) * 0.008 : 0));
+    if (!locked) {
+      camera.position.x += kick.x * kickAmt;
+      camera.position.y += kick.y * kickAmt;
+    }
+    camera.rotation.set(cam.pitch, cam.yaw, locked ? 0 : Math.sin(elapsed * 0.7) * 0.001);
+    animatePeople(dt);
 
     // 灯光呼吸
     for (let i = 0; i < lampFlicker.length; i++) {
@@ -1837,29 +2519,24 @@ FZ.World = (function () {
     // 房间补光跟着玩家走
     const inside = locAt(cam.pos.x, cam.pos.z);
     roomLight.position.set(cam.pos.x, 2.4, cam.pos.z);
-    const roomWant = inside ? 0.8 * (skyCur ? skyCur.room : 1) : 0.0;
+    const roomWant = isIndoor(inside) ? 0.8 * (skyCur ? skyCur.room : 1) : 0.0;
     roomLight.intensity += (roomWant - roomLight.intensity) * Math.min(1, dt * 3);
 
     bloomBump *= Math.exp(-dt * 3.4);
-    bloom.strength = (quality === 'low' ? 0.5 : 0.72) + bloomBump;
+    bloom.strength = Math.min(0.32, (quality === 'high' ? 0.28 : 0.24) + bloomBump);
     flashAmt *= Math.exp(-dt * 4.5);
     gradePass.uniforms.uFlash.value = flashAmt;
     gradePass.uniforms.uTime.value = elapsed;
 
-    hudTick += dt;
+    npcHudTick += raw;
+    if (npcHudTick >= 0.1) { npcHudTick %= 0.1; updateNpcHud(); syncEnvironment(); }
+    hudTick += raw;
     if (phase === 'roam' && hudTick > 0.1) {
-      hudTick = 0;
-      const L = LOC[targetKey];
-      const d = Math.hypot(P.x - L.stand[0], P.z - L.stand[1]);
-      const de = document.getElementById('roam-dist');
-      if (de) de.textContent = d < 1.4 ? '到了' : Math.round(d) + ' m';
-      const cp = document.getElementById('compass-needle');
-      if (cp) {
-        const rel = Math.atan2(L.stand[0] - P.x, L.stand[1] - P.z) - P.yaw + Math.PI;
-        cp.style.transform = `rotate(${rel}rad)`;
-      }
+      hudTick %= 0.1;
+      updateRouteGuide();
     }
 
+    renderer.info.reset();
     composer.render();
   }
 
@@ -1868,10 +2545,20 @@ FZ.World = (function () {
     running = true; last = performance.now();
     raf = requestAnimationFrame(frame);
   }
-  function stop() { running = false; cancelAnimationFrame(raf); raf = 0; }
+  function stop() {
+    focusNPC(null);
+    running = false; cancelAnimationFrame(raf); raf = 0;
+    syncEnvironment();
+    interactionLocked = false; clearControls(); cancelNavigation();
+    npcs.forEach((n) => { n.label.visible = false; });
+    routeArrows.visible = false;
+    clearTimeout(arrivalTimer); hud['nav-arrival'].classList.remove('on');
+  }
 
   return {
     init, start, stop, resize, setPhase, beginSlot, goTo, setCourses, setStats, pulse, setQuality,
+    npcStatus, nearestNpc, setInteractionLocked, goToNPC, focusNPC,
+    onNpcArrive(fn) { npcArriveCb = typeof fn === 'function' ? fn : null; },
     isOk() { return ok; },
     isRoaming() { return ok && phase === 'roam'; },
     isMobile() { return mobile; },
@@ -1879,12 +2566,22 @@ FZ.World = (function () {
     onArrive(fn) { arriveCb = fn; },
     locName(k) { return (LOC[k] || LOC.library).name; },
     standOf(k) { return (LOC[k] || LOC.library).stand.slice(); },
-    place(x, z, yaw) { P.x = x; P.z = z; P.tYaw = P.yaw = yaw; autoPath = null; },
+    place(x, z, yaw) { P.x = x; P.z = z; P.tYaw = P.yaw = yaw; cancelNavigation(); },
     debug() {
       return {
         pos: [+P.x.toFixed(2), +P.z.toFixed(2)], yaw: +P.yaw.toFixed(3),
         cam: [+camera.position.x.toFixed(2), +camera.position.y.toFixed(2), +camera.position.z.toFixed(2)],
         phase, sky: skyIdx, quality, target: targetKey, fps: Math.round(fps),
+        guide: { visible: routeArrows.visible, count: routeArrows.count, ...routeArrows.userData },
+        cameraYaw: cam.yaw, controls: { stick: stick.on, look: look.on, vector: [stick.x, stick.y] },
+        npcTarget, interactionLocked, arrived, npcs: npcs.length,
+        conversation: conversation ? { id: conversation.npc.data.id,
+          face: new T.Vector3(0, 1.55, 0).applyMatrix4(conversation.npc.g.matrixWorld).project(camera).toArray() } : null,
+        npcPositions: npcs.map((n) => ({ id: n.data.id, scene: n.scene, placed: n.placed, pos: [n.g.position.x, n.g.position.y, n.g.position.z] })),
+        renderPixelRatio: renderer.getPixelRatio(), grain: gradePass.uniforms.uGrain.value, aberration: 0, staticBatching: { ...batches },
+        bloom: { strength: bloom.strength, radius: bloom.radius, threshold: bloom.threshold, enabled: bloom.enabled },
+        dayNight: skyIdx === 2 ? 'night' : 'day', sunVisible: sunDisc.visible, moonVisible: moonDisc.visible,
+        ambientWalkers: walkers.filter((w) => w.g.visible).length,
         calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
         auto: !!autoPath, path: autoPath ? autoPath.length : 0,
         next: autoPath && autoPath[0] ? [+autoPath[0][0].toFixed(2), +autoPath[0][1].toFixed(2)] : null

@@ -5,7 +5,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = require('./browser')();
 const URL_BASE = process.env.FZ_URL || 'http://127.0.0.1:8765/index.html';
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : d; };
 const PORT = parseInt(arg('--port', '9460'), 10);

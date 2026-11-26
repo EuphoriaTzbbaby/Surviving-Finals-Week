@@ -34,6 +34,7 @@
 <div id="flash" aria-hidden="true"></div>
 <div id="fx-layer" aria-hidden="true"></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="nav-arrival" class="nav-arrival" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <header class="topbar">
   <a class="brand" href="#" onclick="return false">
@@ -78,7 +79,7 @@
 <section class="screen active" id="screen-title">
   <div class="hero">
     <div class="hero-badge">2026 Qoder 高校创造力大赛 · LifeHack</div>
-    <div class="hero-3d"><i></i>可行走的三维夜间校园 · 宿舍 / 图书馆 / 教学楼 / 食堂 / 打印店</div>
+    <div class="hero-3d"><i></i>9 处校园场景 · 12 位校园人物 · 昼夜漫游与环境音</div>
     <h1 class="hero-title">
       <span class="l1">期末周</span><span class="l2">求生</span>
     </h1>
@@ -178,7 +179,7 @@
     <ol class="steps">
       <li><b>1</b><span>选专业，三门课已预填，可直接跳过</span></li>
       <li><b>2</b><span>点「开始这三天」，你站在宿舍里，台灯还亮着</span></li>
-      <li><b>3</b><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走到光柱标记的地点（或点「直接前往」），事件在那里触发</span></li>
+      <li><b>3</b><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 行走，<kbd>C</kbd> 查看校园人物、<kbd>T</kbd> 与附近的人交谈。走到光柱（或点「直接前往」）触发事件</span></li>
       <li><b>4</b><span>先按 <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> 决定攻哪门，再从 2–3 个选项里挑一个</span></li>
       <li><b>5</b><span>盯住状态栏：没碰的课会遗忘、扣心态，体力和心态别见底</span></li>
       <li><b>6</b><span>走进考场三门连考，生成战绩卡，保存或分享</span></li>
@@ -191,7 +192,7 @@
       <p><b>人脉</b>解锁借笔记、问学长这些高收益选项，考场上还能兑现成情报分。</p>
       <p>连续选学习类选项会累积<b>专注</b>，掌握额外加成，但体力恢复打折。</p>
       <p>卷面按科目出真题：选数学分析就考 ε-δ 和级数，选民法就考请求权基础，不会串味。</p>
-      <p>三维世界里的一切都在跟着数值走：书堆高度是掌握度，冷落的课便利贴会发红，心态越低雾越浓、画面越抖，天光从清晨走到深夜。</p>
+      <p>三维世界里的一切都在跟着数值走：书堆高度是掌握度，冷落的课便利贴会发红，心态紧张时画面会轻微晃动，天光从清晨走到深夜，校园里的人也有各自的作息。</p>
       <p class="rules-heart">这局游戏想说的其实是一件事：<b>三门一起压过来的时候，取舍不是失败</b>。该睡就睡、把时间分清楚的人，通常比通宵的人考得高。</p>
     </div>
   </div>
@@ -211,9 +212,9 @@
         <h2 class="rc-title">走去<b id="roam-place">图书馆</b></h2>
         <p class="rc-sub" id="roam-teaser">这个时段的事，在那里等你。</p>
         <div class="rc-meter">
-          <span class="rc-compass"><i id="compass-needle"></i></span>
+          <span class="rc-compass" aria-hidden="true"><svg id="compass-needle" viewBox="0 0 32 32"><path d="M16 4 28 18H21V28H11V18H4Z" fill="currentColor"/></svg></span>
+          <span class="rc-direction"><b id="roam-direction">沿箭头前进</b><span class="rc-goal">沿金色地面箭头前往目的地</span></span>
           <span class="rc-dist" id="roam-dist">— m</span>
-          <span class="rc-goal">目标地点</span>
         </div>
         <button class="btn-primary" id="btn-go">
           <span>直接前往</span>
@@ -287,6 +288,17 @@
           <span class="f-pips" id="focus-pips"><i></i><i></i><i></i><i></i><i></i></span>
         </div>
         <div class="status-note" id="status-note"></div>
+        <div class="campus-tools">
+          <div class="campus-tools-row">
+            <span class="campus-time"><i aria-hidden="true"></i><span id="world-time-label">清晨 · 白天</span></span>
+            <button id="btn-campus" type="button" title="校园人物（C）">校园人物 <b id="npc-met-count">0 / 12</b></button>
+          </div>
+          <button id="btn-talk" type="button" disabled title="与附近的人交谈（T）">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 1-8 8H5l-4 3 2-7a8 8 0 1 1 17-4Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 10h9M7 14h5" stroke="currentColor" stroke-width="1.6"/></svg>
+            <span id="npc-nearby">附近没有人 · 打开校园人物寻找</span>
+          </button>
+          <p id="npc-travel-status" role="status"></p>
+        </div>
       </div>
 
       <div class="panel tl-panel">
@@ -299,6 +311,13 @@
       </div>
     </aside>
   </div>
+  <aside id="campus-map" class="campus-map" aria-label="校园小地图">
+    <button id="btn-map" type="button" aria-expanded="true" aria-controls="minimap-content">校园地图</button>
+    <div id="minimap-content">
+      <canvas id="minimap" width="400" height="340" role="img" aria-label="校园小地图，蓝色为当前位置，金色为目的地"></canvas>
+      <p class="map-legend"><span class="map-you">蓝色 · 当前位置</span><span class="map-goal">金色 · 目的地</span></p>
+    </div>
+  </aside>
   <div class="stick" id="stick" aria-hidden="true"><i id="stick-knob"></i></div>
   <div class="crosshair" id="crosshair" aria-hidden="true"></div>
   <button class="peek-btn" id="btn-courses" type="button">三科 <b id="peek-warn"></b></button>
@@ -388,6 +407,40 @@
 
 </main>
 
+<dialog id="campus-dialog" aria-labelledby="campus-dialog-title">
+  <div class="campus-dialog-head">
+    <div><span class="campus-eyebrow">CAMPUS PEOPLE</span><h2 id="campus-dialog-title">校园里的人</h2></div>
+    <div class="campus-dialog-actions">
+      <button class="icon-btn" id="btn-campus-browse" type="button" hidden>换个人</button>
+      <button class="icon-btn" id="btn-campus-close" type="button" aria-label="关闭校园人物">关闭 <span aria-hidden="true">×</span></button>
+    </div>
+  </div>
+  <p class="campus-caption">去球场、花园和咖啡角认识新朋友。选一位人物前往交谈，不消耗时段，也不改变考试数值。</p>
+  <div class="campus-dialog-body">
+    <nav class="npc-roster" id="npc-roster" aria-label="选择校园人物"></nav>
+    <section class="npc-conversation" aria-labelledby="npc-name">
+      <div class="npc-person">
+        <div class="npc-portrait" id="npc-portrait" aria-hidden="true"></div>
+        <div><span id="npc-role"></span><h3 id="npc-name"></h3><p id="npc-location"></p></div>
+      </div>
+      <p class="npc-bio" id="npc-bio"></p>
+      <div class="npc-speech" id="npc-speech" aria-live="polite"><span id="npc-question"></span><p id="npc-reply"></p></div>
+      <div class="npc-topics" id="npc-topics" aria-label="选择聊天话题"></div>
+      <form class="npc-chat-form" id="npc-chat-form" hidden>
+        <label for="npc-chat-input">想聊点什么？</label>
+        <div class="npc-chat-row">
+          <input id="npc-chat-input" type="text" maxlength="160" autocomplete="off" required placeholder="例如：我复习不下去了…" aria-describedby="npc-chat-help">
+          <button type="submit">发送</button>
+        </div>
+        <p id="npc-chat-help">离线关键词对话 · 可以聊复习、作息和校园生活</p>
+      </form>
+      <button class="btn-primary" id="btn-npc-visit" type="button">去找 TA</button>
+      <p class="npc-note" id="npc-note"></p>
+    </section>
+  </div>
+  <div class="campus-dialog-foot"><span id="campus-met-summary">本局相识 0 / 12</span><span>白天与夜晚，他们有不同的故事</span></div>
+</dialog>
+
 <!-- ============ 过夜 ============ -->
 <div class="overlay" id="overlay-dayend">
   <div class="de-card panel">
@@ -410,6 +463,7 @@
 <script src="js/voice-lines.js"></script>
 <script src="js/voice.js"></script>
 <script src="js/card.js"></script>
+<script src="js/npcs.js"></script>
 <script src="js/world.js"></script>
 <script src="js/game.js"></script>
 </body>

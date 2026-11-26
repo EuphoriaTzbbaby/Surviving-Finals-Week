@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = require('./browser')();
 const URL_BASE = process.env.FZ_URL || 'http://127.0.0.1:8765/index.html';
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : d; };
 const WIDTH = parseInt(arg('--width', '1440'), 10);
@@ -59,7 +59,7 @@ class CDP {
     });
   }
   async eval(expression) {
-    const r = await this.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+    const r = await this.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true });
     if (r.exceptionDetails) throw new Error('页面脚本异常: ' + JSON.stringify(r.exceptionDetails.exception));
     return r.result.value;
   }
@@ -183,6 +183,19 @@ async function pickChoice(cdp) {
   }
 }
 
+const RUN_PROGRESS = `(() => {
+  const s = JSON.parse(localStorage.getItem('fz.run.v1'));
+  return s && { day: s.day, slot: s.slot, tick: s.tick, phase: s.phase,
+    stats: s.stats, courses: s.courses, decisions: s.decisions, examStep: s.examStep };
+})()`;
+
+async function reloadAndResume(cdp) {
+  await cdp.send('Page.navigate', { url: URL_BASE });
+  await cdp.wait(`!!window.FZ && document.getElementById('btn-resume').classList.contains('on')
+    && !document.getElementById('world-veil').classList.contains('on')`, '刷新后继续入口');
+  await cdp.eval(`document.getElementById('btn-resume').click()`);
+}
+
 async function main() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'fz-uitest-'));
   if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -210,7 +223,7 @@ async function main() {
     await cdp.send('Log.enable');
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: WIDTH, height: HEIGHT, deviceScaleFactor: 1, mobile: WIDTH < 700 });
     await cdp.send('Page.navigate', { url: URL_BASE });
-    await cdp.wait(`!!window.FZ && !!document.getElementById('fact-exams')`, '脚本加载');
+    await cdp.wait(`!!window.FZ && !!document.getElementById('fact-exams') && !document.getElementById('world-veil').classList.contains('on')`, '脚本与三维初始化');
     await sleep(600);
     if (FLAT) {
       await cdp.eval(`(() => { const b = document.getElementById('btn-3d'); if (b && !b.classList.contains('off')) b.click(); })()`);
@@ -386,7 +399,21 @@ async function main() {
       if (overlay) {
         await cdp.shot('04-dayend');
         await probe(cdp, '过夜弹窗');
-        await cdp.eval(`document.getElementById('btn-dayend-next').click()`);
+        const night = JSON.stringify(await cdp.eval(RUN_PROGRESS));
+        const summary = await cdp.eval(`document.getElementById('dayend-lines').textContent`);
+        for (let reload = 0; reload < 2; reload++) {
+          await reloadAndResume(cdp);
+          if (JSON.stringify(await cdp.eval(RUN_PROGRESS)) !== night) note('过夜刷新后数值重复结算');
+          if (await cdp.eval(`document.getElementById('dayend-lines').textContent`) !== summary) note('过夜刷新后结算明细丢失');
+        }
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+        const wake = await cdp.eval(RUN_PROGRESS);
+        if (wake.slot !== 0 || wake.tick !== step || wake.decisions !== step) note('过夜空格跳过了清晨时段');
+        if (await cdp.eval(`document.getElementById('overlay-dayend').classList.contains('on')`)) note('过夜空格没有关闭弹窗');
+        await cdp.eval(`document.getElementById('btn-next').click()`);
+        if (JSON.stringify(await cdp.eval(RUN_PROGRESS)) !== JSON.stringify(wake)) note('未选择时继续按钮推进了时段');
+        console.log(`  第 ${wake.day - 1} 夜：两次刷新数值不变，空格回到清晨`);
         await sleep(700);
       }
       await cdp.wait(`document.getElementById('screen-game').classList.contains('active')`, '回到对局');
@@ -437,7 +464,13 @@ async function main() {
       if (q === 0) { await probe(cdp, '考试页'); await cdp.shot('06-exam'); }
       if (q === 2) await cdp.shot('07-exam-side');
       await cdp.eval(`document.querySelectorAll('#exam-choices .choice')[0].click()`);
-      await sleep(2600);
+      const answered = await cdp.eval(RUN_PROGRESS);
+      if (answered.examStep !== q + 1 || answered.decisions !== 10 + q) note(`第 ${q + 1} 题作答进度没有原子保存`);
+      if (q === 0 || q === 3) {
+        await reloadAndResume(cdp);
+        if (q === 0 && JSON.stringify(await cdp.eval(RUN_PROGRESS)) !== JSON.stringify(answered)) note('考试刷新后评分或进度改变');
+        console.log(`  第 ${q + 1} 题作答后刷新：进度已恢复`);
+      } else await sleep(2600);
     }
     const distinct = new Set(sessions.map((s) => s.course));
     console.log('  联考覆盖科目:', [...distinct].join(' / '));
@@ -494,6 +527,8 @@ async function main() {
       const cs = await cdp.eval(`document.querySelectorAll('#course-list .cr').length`);
       console.log('  续玩回到:', back, '· 三科面板', cs, '行');
       if (cs !== 3) note('续玩后三科面板丢了');
+      const resumedWorld = await cdp.eval(`({ on: document.body.classList.contains('world-on'), phase: document.body.dataset.wphase })`);
+      if (resumedWorld.on && !['event', 'roam'].includes(resumedWorld.phase)) note('续玩后三维世界仍停留在 ' + resumedWorld.phase);
       await probe(cdp, '续玩');
     }
 
@@ -504,6 +539,26 @@ async function main() {
     if (dialogs.length) await cdp.send('Page.handleJavaScriptDialog', { accept: true });
     await sleep(800);
     console.log('  重开后屏幕:', await cdp.eval(`document.querySelector('.screen.active').id`));
+
+    await cdp.eval(`(() => {
+      const major = document.getElementById('major-select');
+      major.value = '__custom'; major.dispatchEvent(new Event('change'));
+      const majorInput = document.getElementById('custom-major-input');
+      majorInput.value = '<i>专业&</i>'; majorInput.dispatchEvent(new Event('input'));
+      const subject = document.getElementById('subject-select');
+      subject.value = '__custom'; subject.dispatchEvent(new Event('change'));
+      const input = document.getElementById('custom-subject-input');
+      input.value = '<b>安全&</b>'; input.dispatchEvent(new Event('input'));
+      document.getElementById('btn-start').click();
+    })()`);
+    const literal = await cdp.eval(`(() => {
+      const names = JSON.parse(localStorage.getItem('fz.run.v1')).courses.map(c => c.name);
+      const labels = [...document.querySelectorAll('#course-list .cr-name')];
+      return labels.length === 3 && labels.every((el, i) => el.textContent === names[i] && el.children.length === 0)
+        && [...document.querySelectorAll('#course-switch .cs-name')].every((el, i) => el.textContent === names[i] && el.children.length === 0);
+    })()`);
+    if (!literal) note('自定义专业或课名被解析为 HTML');
+    else console.log('  自定义专业/课名：HTML 字符按原文显示');
 
     const errs = cdp.consoleErrors();
     const voice = await cdp.eval(`({ mode: FZ.Voice.mode(), supported: FZ.Voice.supported() })`);
