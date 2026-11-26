@@ -66,6 +66,10 @@
       <svg class="snd-off" viewBox="0 0 24 24" aria-hidden="true" style="display:none"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="snd-label">音效开</span>
     </button>
+    <button class="icon-btn" id="btn-help" title="新手教程（H）">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M9.4 9.2a2.7 2.7 0 1 1 4.5 2.1c-.9.7-1.4 1.2-1.4 2.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12.3" cy="16.7" r="1.05" fill="currentColor"/></svg>
+      <span>教程</span>
+    </button>
     <button class="icon-btn" id="btn-restart" title="回到开局">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>重开</span>
@@ -152,6 +156,10 @@
         <span>开始这三天</span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m-5-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
+      <button class="btn-ghost" id="btn-tutorial">
+        <span>新手教程</span>
+        <i>90 秒 · 五步</i>
+      </button>
       <button class="btn-ghost" id="btn-resume">
         <span>继续上一局</span>
         <i id="resume-info"></i>
@@ -175,7 +183,7 @@
   </div>
 
   <div class="panel howto">
-    <div class="panel-head"><h2>怎么玩</h2><span class="hint">评委六步以内</span></div>
+    <div class="panel-head"><h2>怎么玩</h2><button class="link-btn" id="btn-tutorial-2" type="button">重看 90 秒新手教程</button></div>
     <ol class="steps">
       <li><b>1</b><span>选专业，三门课已预填，可直接跳过</span></li>
       <li><b>2</b><span>点「开始这三天」，你站在宿舍里，台灯还亮着</span></li>
@@ -407,6 +415,110 @@
 
 </main>
 
+<dialog id="tutorial-dialog" class="tutorial" aria-labelledby="tut-title">
+  <div class="tut-head">
+    <div>
+      <span class="tut-kicker">NEW PLAYER · 90 秒</span>
+      <h2 id="tut-title">先弄懂这三天，再开始</h2>
+    </div>
+    <button class="icon-btn" id="btn-tutorial-close" type="button" aria-label="关闭新手教程">关闭 <span aria-hidden="true">×</span></button>
+  </div>
+
+  <div class="tut-stage" aria-live="polite">
+    <section class="tut-step on" data-t="0">
+      <div class="tut-art" aria-hidden="true">
+        <div class="tut-days"><span>第 1 天</span><span>第 2 天</span><span>第 3 天</span></div>
+        <div class="tut-slots"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="tut-courses">
+          <span class="c1"><b>主攻</b>最怕的那门 · 4 学分</span>
+          <span class="c2"><b>同期</b>也要考 · 3 学分</span>
+          <span class="c3"><b>同期</b>也要考 · 2 学分</span>
+        </div>
+      </div>
+      <div class="tut-copy">
+        <span class="tut-step-no">01 / 05 · 目标</span>
+        <h3>三门课，抢同一个三天</h3>
+        <p>一局三天、九个时段。你有一个主攻科目和两门同期要考的课，<b>同一个时段的学习收益只会进一门课</b>；被冷落的课会在后台遗忘、扣你的心态。</p>
+        <p class="tut-tip">不用追求三门都满分。该睡就睡、把时间分清楚，通常比通宵考得高。</p>
+      </div>
+    </section>
+
+    <section class="tut-step" data-t="1">
+      <div class="tut-art" aria-hidden="true">
+        <div class="tut-stat"><span>掌握</span><i style="--v:72%"></i><em>按学分加权，决定分数上限</em></div>
+        <div class="tut-stat"><span>体力</span><i class="s2" style="--v:56%"></i><em>低于 25 收益减半，见底会强制睡着</em></div>
+        <div class="tut-stat"><span>心态</span><i class="s3" style="--v:41%"></i><em>低于 25 会走神，见底会崩一次</em></div>
+        <div class="tut-stat"><span>人脉</span><i class="s4" style="--v:28%"></i><em>解锁借笔记、问学长这类高收益选项</em></div>
+      </div>
+      <div class="tut-copy">
+        <span class="tut-step-no">02 / 05 · 四个数值</span>
+        <h3>盯着体力与心态，别一起见底</h3>
+        <p>四个数值互相牵制：学习抬掌握、掉体力；熬夜加掌握、掉心态；睡觉回体力，但三门都会遗忘一部分。</p>
+        <p class="tut-tip">考试当天，体力或心态见底都会直接倒扣分。留一点余量，比多背一页更稳。</p>
+      </div>
+    </section>
+
+    <section class="tut-step" data-t="2">
+      <div class="tut-art tut-art-keys" aria-hidden="true">
+        <div class="tut-keys">
+          <kbd>W</kbd>
+          <div><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+        </div>
+        <div class="tut-mouse"><span></span><b>按住左键拖动<br>转动视角</b></div>
+        <div class="tut-key-notes"><span><kbd>Shift</kbd> 快走</span><span><kbd>C</kbd> 校园人物</span><span><kbd>T</kbd> 就近交谈</span></div>
+      </div>
+      <div class="tut-copy">
+        <span class="tut-step-no">03 / 05 · 走动</span>
+        <h3>先走到光柱，事才会发生</h3>
+        <p>用 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 在三维校园里走，按住鼠标左键拖动看四周。不想走也行：点「直接前往」，或按 <kbd>F</kbd> / 空格自动寻路。</p>
+        <p class="tut-tip">手机端是左下摇杆 + 右侧拖动。随时按 <kbd>H</kbd> 可以重新打开这份教程。</p>
+      </div>
+    </section>
+
+    <section class="tut-step" data-t="3">
+      <div class="tut-art" aria-hidden="true">
+        <div class="tut-qwe"><span class="on">Q 主攻</span><span>W 同期</span><span>E 同期</span></div>
+        <div class="tut-choice"><b>去图书馆占座，把这一章啃完</b><em>掌握 +5 · 体力 −9 · 专注 +1</em></div>
+        <div class="tut-choice dim"><b>回宿舍补一觉</b><em>体力 +22 · 三门小幅遗忘</em></div>
+      </div>
+      <div class="tut-copy">
+        <span class="tut-step-no">04 / 05 · 抉择</span>
+        <h3>先按 Q / W / E 选攻哪门，再选做法</h3>
+        <p>每个时段有 2–3 个选项，选之前先确认「这一下算给哪门课」。连续选学习类选项会累积专注，掌握有额外加成，但体力恢复打折。</p>
+        <p class="tut-tip">没碰的课会亮红提醒。看到两门都在闪，就该做一次取舍，而不是硬撑。</p>
+      </div>
+    </section>
+
+    <section class="tut-step" data-t="4">
+      <div class="tut-art" aria-hidden="true">
+        <div class="tut-report">
+          <span>期末人设 · FINALS REPORT</span>
+          <b>稳态通关型</b>
+          <em>82 / 100 · 加权绩点 3.4</em>
+          <div class="tut-report-bars"><i style="--v:86%"></i><i style="--v:74%"></i><i style="--v:63%"></i></div>
+          <small>主攻 91 · 同期 78 · 同期 72</small>
+        </div>
+      </div>
+      <div class="tut-copy">
+        <span class="tut-step-no">05 / 05 · 结算</span>
+        <h3>三门连考，换一张能分享的战绩卡</h3>
+        <p>第三天走进考场连考三门，题目按课程出，不会串科。结算会给出三科成绩单、加权绩点、14 种结局之一，以及一张可以保存或分享的人设卡。</p>
+        <p class="tut-tip">结局不只一种活法。先按自己的方式活一遍，再回来集图鉴。</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="tut-foot">
+    <button class="tut-skip" id="btn-tutorial-skip" type="button">跳过，我直接玩</button>
+    <div class="tut-nav">
+      <span class="tut-dots" id="tut-dots" aria-hidden="true"></span>
+      <button class="btn-ghost" id="btn-tut-prev" type="button">上一步</button>
+      <button class="btn-primary" id="btn-tut-next" type="button"><span>下一步</span></button>
+    </div>
+  </div>
+  <p class="tut-kbd">← → 翻页 · Esc 关闭 · 游戏中按 H 随时重看</p>
+</dialog>
+
 <dialog id="campus-dialog" aria-labelledby="campus-dialog-title">
   <div class="campus-dialog-head">
     <div><span class="campus-eyebrow">CAMPUS PEOPLE</span><h2 id="campus-dialog-title">校园里的人</h2></div>
@@ -421,7 +533,7 @@
     <section class="npc-conversation" aria-labelledby="npc-name">
       <div class="npc-person">
         <div class="npc-portrait" id="npc-portrait" aria-hidden="true"></div>
-        <div><span id="npc-role"></span><h3 id="npc-name"></h3><p id="npc-location"></p></div>
+        <div><span id="npc-role"></span><h3 id="npc-name"></h3><p id="npc-location"></p><span class="npc-ai-state" id="npc-ai-state">离线词库</span></div>
       </div>
       <p class="npc-bio" id="npc-bio"></p>
       <div class="npc-speech" id="npc-speech" aria-live="polite"><span id="npc-question"></span><p id="npc-reply"></p></div>
@@ -464,6 +576,7 @@
 <script src="js/voice.js"></script>
 <script src="js/card.js"></script>
 <script src="js/npcs.js"></script>
+<script src="js/ai.js"></script>
 <script src="js/world.js"></script>
 <script src="js/game.js"></script>
 </body>

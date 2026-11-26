@@ -23,7 +23,7 @@ const server = http.createServer((req, res) => {
   catch { res.writeHead(400); res.end(); return; }
   if (pathname === '/') pathname = '/index.html';
   const parts = pathname.slice(1).split('/');
-  const allowed = pathname === '/index.html' || ['css', 'js', 'assets'].includes(parts[0]);
+  const allowed = pathname === '/index.html' || ['css', 'js', 'assets', 'api'].includes(parts[0]);
   if (!allowed || parts.some((part) => !part || part.startsWith('.') || /[\\:\x00]/.test(part))) {
     res.writeHead(404); res.end(); return;
   }
@@ -31,7 +31,7 @@ const server = http.createServer((req, res) => {
   fs.stat(file, (err, stat) => {
     if (err || !stat.isFile()) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, {
-      'Content-Type': types[path.extname(file)] || 'application/octet-stream',
+      'Content-Type': types[path.extname(file)] || (parts[0] === 'api' ? 'application/json; charset=utf-8' : 'application/octet-stream'),
       'Content-Length': stat.size,
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff'

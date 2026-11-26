@@ -1947,7 +1947,7 @@ FZ.World = (function () {
       if (inputBlocked() || !look.on || e.pointerId !== look.id) return;
       const dx = e.clientX - look.px, dy = e.clientY - look.py;
       look.px = e.clientX; look.py = e.clientY;
-      const sensitivity = e.pointerType === 'touch' ? 1.8 / Math.max(320, Math.min(innerWidth, innerHeight)) : 0.0034;
+      const sensitivity = e.pointerType === 'touch' ? 2.2 / Math.max(320, Math.min(innerWidth, innerHeight)) : 0.0068;
       const k = phase === 'roam' ? sensitivity : sensitivity * 0.65;
       P.tYaw -= dx * k;
       P.tPitch = Math.max(-1.15, Math.min(1.0, P.tPitch - dy * k * 0.85));

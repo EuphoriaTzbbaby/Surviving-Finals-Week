@@ -14,6 +14,9 @@ window.FZ = window.FZ || {};
   let S = null;
   let meta = loadMeta();
   let typing = null;
+  let aiState = null;
+  let aiBusy = false;
+  const npcMemory = new Map();
   let busy = false;
 
   function loadMeta() {
@@ -24,7 +27,7 @@ window.FZ = window.FZ || {};
     return defaultMeta();
   }
   function defaultMeta() {
-    return { runs: 0, best: 0, unlocked: [], major: '', subject: '', diff: 'normal', sound: true, passed: 0 };
+    return { runs: 0, best: 0, unlocked: [], major: '', subject: '', diff: 'normal', sound: true, passed: 0, tutorialSeen: false };
   }
   function saveMeta() {
     try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
@@ -884,6 +887,7 @@ window.FZ = window.FZ || {};
   /* ---------- 开局 ---------- */
   function newRun(major, subject, diff, sides) {
     busy = false;
+    npcMemory.clear();
     S = {
       major, subject, diff,
       day: 1, slot: 0, tick: 0, active: 0,
@@ -1210,6 +1214,11 @@ window.FZ = window.FZ || {};
     $('#npc-topics').replaceChildren();
     $('#npc-chat-form').hidden = !near;
     $('#npc-chat-input').value = '';
+    $('#npc-chat-input').disabled = aiBusy;
+    const sendBtn = $('#npc-chat-form button[type="submit"]');
+    if (sendBtn) sendBtn.disabled = aiBusy;
+    paintAIState();
+    if (!aiState) ensureAIState();
     if (near) npc.topics.forEach((topic) => {
       const b = document.createElement('button');
       b.type = 'button'; b.textContent = topic.label; b.dataset.topic = topic.id;
@@ -1268,34 +1277,166 @@ window.FZ = window.FZ || {};
     $('#btn-campus-close').focus({ preventScroll: true });
   }
 
+  /* ---------- NPC 对话：DeepSeek Flash / 离线词库 ---------- */
+  function localNpcReply(npc, text, slot) {
+    const lower = text.toLowerCase();
+    const matches = npc.topics.map((topic) => ({
+      topic, score: (FZ.NPC_CHAT_WORDS[topic.id] || []).reduce((best, word) => lower.includes(word) ? Math.max(best, word.length) : best, 0)
+    })).sort((a, b) => b.score - a.score);
+    if (/^(你好|您好|嗨|哈喽|hello|hi|早上好|晚上好|在吗)[！!，,。.?？\s]*$/i.test(text)) return npc.greeting[slot];
+    if (/谢谢|感谢|多谢/.test(text)) return `不客气。${npc.greeting[slot]}`;
+    if (matches[0].score) return matches[0].topic.replies[slot];
+    return `这句我还没太明白。我比较熟悉「${npc.topics.map((t) => t.label).join('」「')}」，你可以换个关键词，或者点上面的话题。`;
+  }
+
+  function paintAIState() {
+    const el = $('#npc-ai-state');
+    if (!el) return;
+    const ok = !!(aiState && aiState.ok);
+    el.classList.toggle('on', ok);
+    el.classList.toggle('busy', aiBusy);
+    el.textContent = aiBusy ? '正在想…' : ok ? (/flash/i.test(aiState.model || '') ? 'DeepSeek Flash' : 'DeepSeek 在线') : '离线词库';
+    const help = $('#npc-chat-help');
+    if (help) help.textContent = ok
+      ? '自由输入由 DeepSeek Flash 生成；上面的话题仍是预写回答'
+      : '离线关键词对话 · 可聊复习、作息和校园生活';
+  }
+
+  async function ensureAIState() {
+    if (aiState) { paintAIState(); return; }
+    const el = $('#npc-ai-state');
+    if (el) el.textContent = '检测 AI…';
+    if (FZ.AI) aiState = await FZ.AI.status();
+    else aiState = { ok: false };
+    paintAIState();
+  }
+
+  function rememberNpc(id, role, content) {
+    const list = npcMemory.get(id) || [];
+    list.push({ role, content: String(content).slice(0, 300) });
+    while (list.length > 6) list.shift();
+    npcMemory.set(id, list);
+  }
+
+  /* ---------- 新手教程 ---------- */
+  let tutIdx = 0;
+
+  function tutorialSteps() { return $$('#tutorial-dialog .tut-step'); }
+
+  function renderTutorial() {
+    const steps = tutorialSteps();
+    steps.forEach((el, i) => el.classList.toggle('on', i === tutIdx));
+    $('#tut-dots').innerHTML = steps.map((_, i) => `<i class="${i === tutIdx ? 'on' : ''}"></i>`).join('');
+    $('#btn-tut-prev').disabled = tutIdx === 0;
+    const last = tutIdx === steps.length - 1;
+    const title = $('#screen-title').classList.contains('active');
+    $('#btn-tut-next span').textContent = !last ? '下一步' : title ? '开始这三天' : (S && !S.finished ? '继续这一局' : '知道了');
+  }
+
+  function openTutorial() {
+    const d = $('#tutorial-dialog');
+    if (!d || d.open) return;
+    tutIdx = 0;
+    renderTutorial();
+    d.showModal();
+    $('#btn-tut-next').focus({ preventScroll: true });
+    if (!meta.tutorialSeen) { meta.tutorialSeen = true; saveMeta(); }
+  }
+
+  function closeTutorial() {
+    const d = $('#tutorial-dialog');
+    if (d && d.open) d.close();
+  }
+
+  function tutAdvance() {
+    const steps = tutorialSteps();
+    if (tutIdx < steps.length - 1) { tutIdx += 1; renderTutorial(); return; }
+    const start = $('#screen-title').classList.contains('active');
+    closeTutorial();
+    if (start) $('#btn-start').click();
+  }
+
   function bind() {
+    $('#btn-tutorial').addEventListener('click', openTutorial);
+    $('#btn-tutorial-2').addEventListener('click', openTutorial);
+    $('#btn-help').addEventListener('click', openTutorial);
+    $('#btn-tutorial-close').addEventListener('click', closeTutorial);
+    $('#btn-tutorial-skip').addEventListener('click', closeTutorial);
+    $('#btn-tut-prev').addEventListener('click', () => { if (tutIdx > 0) { tutIdx -= 1; renderTutorial(); } });
+    $('#btn-tut-next').addEventListener('click', tutAdvance);
+    $('#tutorial-dialog').addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'ArrowRight') { e.preventDefault(); tutAdvance(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); if (tutIdx > 0) { tutIdx -= 1; renderTutorial(); } }
+    });
     $('#btn-campus').addEventListener('click', () => openCampus());
     $('#btn-talk').addEventListener('click', () => {
       const id = worldOn() && FZ.World.nearestNpc();
       if (id) openCampus(id);
     });
-    $('#npc-chat-form').addEventListener('submit', (e) => {
+    $('#npc-chat-form').addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (aiBusy) return;
       const input = $('#npc-chat-input');
       const text = input.value.trim().slice(0, 160);
       if (!text || !S || S.phase !== 'event' || !$('#campus-dialog').open) return;
       const npc = FZ.NPCS.find((n) => n.id === campusNpc);
+      if (!npc) return;
       const near = worldOn() ? FZ.World.npcStatus().some((n) => n.id === campusNpc && n.nearby) : campusTalking === campusNpc;
       if (!near) return;
-      const slot = Math.min(S.slot, 2), lower = text.toLowerCase();
-      const matches = npc.topics.map((topic) => ({
-        topic, score: (FZ.NPC_CHAT_WORDS[topic.id] || []).reduce((best, word) => lower.includes(word) ? Math.max(best, word.length) : best, 0)
-      })).sort((a, b) => b.score - a.score);
-      let reply;
-      if (/^(你好|您好|嗨|哈喽|hello|hi|早上好|晚上好|在吗)[！!，,。.?？\s]*$/i.test(text)) reply = npc.greeting[slot];
-      else if (/谢谢|感谢|多谢/.test(text)) reply = `不客气。${npc.greeting[slot]}`;
-      else if (matches[0].score) reply = matches[0].topic.replies[slot];
-      else reply = `这句我还没太明白。我比较熟悉「${npc.topics.map((t) => t.label).join('」「')}」，你可以换个关键词，或者点上面的话题。`;
+      const slot = Math.min(S.slot, 2);
+      const local = localNpcReply(npc, text, slot);
       $('#npc-question').textContent = `你说：${text}`;
-      $('#npc-reply').textContent = fill(reply);
       $$('#npc-topics button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-      input.value = ''; input.focus();
+      input.value = '';
       FZ.Audio.play('chatReply');
+      if (!aiState) {
+        // 首次对话先给离线回复，AI 探测在后台完成，下一次输入即可用；避免网络慢时卡住输入。
+        $('#npc-reply').textContent = fill(local);
+        input.focus();
+        ensureAIState();
+        return;
+      }
+      if (!aiState.ok) {
+        $('#npc-reply').textContent = fill(local);
+        input.focus();
+        return;
+      }
+      aiBusy = true;
+      paintAIState();
+      $('#npc-speech').setAttribute('aria-busy', 'true');
+      $('#npc-reply').textContent = '正在想怎么说…';
+      const send = e.currentTarget.querySelector('button[type="submit"]');
+      if (send) send.disabled = true;
+      input.disabled = true;
+      const history = npcMemory.get(npc.id) || [];
+      try {
+        const out = await FZ.AI.chat({
+          npcId: npc.id, message: text, day: S.day, slot,
+          place: FZ.World.locName(npc.places[slot]),
+          major: S.major, courses: S.courses.map((c) => c.name),
+          stats: { k: S.stats.k, s: S.stats.s, m: S.stats.m, n: S.stats.n },
+          history
+        });
+        if ($('#campus-dialog').open && campusNpc === npc.id) {
+          $('#npc-reply').textContent = out.text;
+          rememberNpc(npc.id, 'user', text);
+          rememberNpc(npc.id, 'assistant', out.text);
+        }
+      } catch (err) {
+        if ($('#campus-dialog').open && campusNpc === npc.id) {
+          $('#npc-reply').textContent = fill(local);
+          toast('AI 暂时没接上，先用离线回复', '#FFB020');
+        }
+        console.warn('AI 对话失败，已用离线回复：' + (err && err.message ? err.message : err));
+      } finally {
+        aiBusy = false;
+        $('#npc-speech').removeAttribute('aria-busy');
+        paintAIState();
+        if (send) send.disabled = false;
+        input.disabled = false;
+        if ($('#campus-dialog').open && campusNpc === npc.id) input.focus();
+      }
     });
     $('#btn-campus-browse').addEventListener('click', () => {
       campusTalking = null; renderCampus();
@@ -1446,10 +1587,11 @@ window.FZ = window.FZ || {};
     });
 
     document.addEventListener('keydown', (e) => {
-      if ($('#campus-dialog').open) return;
+      if ($('#campus-dialog').open || $('#tutorial-dialog').open) return;
       const tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       if (e.key === 'm' || e.key === 'M') { $('#btn-sound').click(); return; }
+      if (e.key === 'h' || e.key === 'H') { openTutorial(); return; }
       if (e.key === 'Escape') { skipType(); return; }
       if (S && S.phase === 'dayend') {
         if (e.key === ' ' || e.key === 'Enter') {
@@ -1553,6 +1695,13 @@ window.FZ = window.FZ || {};
     renderHistory();
     bind();
     show('screen-title');
+    const headless = /HeadlessChrome/i.test(navigator.userAgent) || navigator.webdriver;
+    if (!meta.tutorialSeen && !headless) {
+      setTimeout(() => {
+        if (!$('#screen-title').classList.contains('active') || $('#campus-dialog').open) return;
+        openTutorial();
+      }, 1600);
+    }
     if (!FZ.Audio.supported()) {
       $('#btn-sound').classList.add('off');
       $('#btn-sound').querySelector('.snd-label').textContent = '不支持';

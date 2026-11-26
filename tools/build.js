@@ -31,10 +31,14 @@ function copy(rel) {
 }
 
 copy('index.html');
-for (const d of ['css', 'js', 'assets']) if (fs.existsSync(path.join(src, d))) copy(d);
+for (const d of ['css', 'js', 'assets', 'api']) if (fs.existsSync(path.join(src, d))) copy(d);
+
+// GitHub Pages 用 Jekyll 时会忽略以下划线开头的路径，.nojekyll 关闭该行为。
+fs.writeFileSync(path.join(out, '.nojekyll'), '');
+files++; bytes += 0;
 
 // 产物必须自带三维引擎，否则线上会静默退回平面
-const need = ['index.html', 'js/world.js', 'js/vendor/three.min.js', 'js/vendor/three-fx.js', 'js/subjects.js', 'js/npcs.js'];
+const need = ['index.html', 'js/world.js', 'js/vendor/three.min.js', 'js/vendor/three-fx.js', 'js/subjects.js', 'js/npcs.js', 'js/ai.js', 'api/ai-status'];
 const missing = need.filter((f) => !fs.existsSync(path.join(out, f)));
 if (missing.length) throw new Error('产物缺文件: ' + missing.join(', '));
 
